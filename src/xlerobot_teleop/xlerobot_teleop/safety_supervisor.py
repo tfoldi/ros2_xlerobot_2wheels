@@ -2,16 +2,28 @@
 """Watches per-joint temperature and current from sts_hardware_interface and
 stops the robot before something cooks or stalls. See ARCHITECTURE §4.4.
 
-Not wired up yet, hardware_interface exports state through /joint_states, and
-whether that message carries effort/temperature/current the way
-sts_hardware_interface exposes them, or whether we need its own diagnostics
-topic instead, is one of the week 1 things to check (ARCHITECTURE §7 R1/R2).
-This is the shape the node should end up with, thresholds are placeholders.
+Checked against the driver source: temperature/current/voltage are exported
+as custom-named state interfaces, not the standard position/velocity/effort
+triple. joint_state_broadcaster can't put those in sensor_msgs/JointState,
+there's no field for them, they go out on /dynamic_joint_states instead
+(control_msgs/DynamicJointState). Still not wired up, this reads that topic
+now instead of guessing at JointState, but the actual threshold logic below
+is still a placeholder.
+
+Still Python/rclpy for now. Rust (rclrs) is the plan for our own nodes, this
+one included, but rclrs on Jazzy has open install/build issues as of writing
+and this stub isn't load-bearing yet, so the toolchain switch is its own
+piece of work, not bundled into this slice.
+
+Also don't wire trigger_estop to sts_hardware_interface's own
+/emergency_stop service. Confirmed live: with two bus instances that service
+name collides, a call only reaches one bus. Use controller_manager's
+switch_controller to deactivate everything instead, see ARCHITECTURE §4.4.
 """
 
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import JointState
+from control_msgs.msg import DynamicJointState
 from std_msgs.msg import Bool
 
 # STS3215 datasheet gives no hard shutdown temperature for continuous duty.
@@ -31,17 +43,18 @@ class SafetySupervisor(Node):
     def __init__(self):
         super().__init__("xlerobot_safety_supervisor")
         self.estop_pub = self.create_publisher(Bool, "e_stop", 10)
-        self.create_subscription(JointState, "joint_states", self.on_joint_states, 10)
+        self.create_subscription(
+            DynamicJointState, "dynamic_joint_states", self.on_dynamic_joint_states, 10)
         self.last_msg_time = None
         self.create_timer(0.1, self.check_watchdog)
         self.get_logger().info("safety supervisor up, watchdog %.2fs" % WATCHDOG_TIMEOUT_S)
 
-    def on_joint_states(self, msg: JointState):
+    def on_dynamic_joint_states(self, msg: DynamicJointState):
         self.last_msg_time = self.get_clock().now()
-        # TODO: JointState has no standard temperature/current field.
-        # Either sts_hardware_interface publishes those on a separate topic
-        # (diagnostics_msgs?), or effort is being reused as a stand-in. Check
-        # the actual driver before writing the real threshold logic here.
+        # TODO: msg.joint_names lines up with msg.interface_values, each entry
+        # has its own interface_names/values list ("temperature", "current",
+        # ...). Real threshold check against TEMPERATURE_LIMIT_C /
+        # STALL_CURRENT_THRESHOLD goes here, still not written.
         pass
 
     def check_watchdog(self):

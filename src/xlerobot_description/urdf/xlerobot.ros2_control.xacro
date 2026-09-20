@@ -8,21 +8,36 @@
   So bus2 runs mixed modes on one UART. sts_hardware_interface does this with a
   per-joint operating_mode param, which is why we picked it.
 
-  Two things are not verified yet (ARCHITECTURE.md, R1 and R2):
-    - two instances of the plugin under one controller_manager
-    - whether it unwraps multi-turn wheel position. STS3215 position wraps at
-      4096 ticks, about every 0.4 m. diff_drive_controller differences position,
-      so without unwrapping odometry is wrong from the first metre.
+  Checked against the real driver source and a live two-bus mock test
+  (adityakamath/sts_hardware_interface, read 2026-09-20):
 
-  Plugin class name and param names below are guessed from the docs. Check with:
-    ros2 control list_hardware_interfaces
-    grep -r PLUGINLIB_EXPORT_CLASS src/sts_hardware_interface
+    R2, two instances under one controller_manager: works. Tested with mock
+    mode, both buses loaded/configured/activated clean. One real gotcha
+    though: each instance opens its own internal node hardcoded to the name
+    "sts_hardware_interface_node" (src/sts_hardware_interface.cpp:622), and
+    both advertise /emergency_stop on that same absolute name. Two servers,
+    one service name, so calling /emergency_stop only reaches one bus, not
+    both. Don't build the safety supervisor around that service, see
+    ARCHITECTURE.md section 4.4.
+
+    R1, multi-turn wheel position: confirmed broken for our case. The driver
+    reads the raw encoder register every cycle and maps it straight to
+    radians (sts_conversions.hpp: raw_position_to_radians), no revolution
+    counter, same code path for every operating_mode. A continuously
+    spinning wheel wraps every physical turn (~0.4m here), diff_drive_controller
+    differences that position, so odometry breaks on the first wrap. Needs
+    either an upstream patch or our own unwrapping layer before this can feed
+    diff_drive_controller, see ARCHITECTURE.md section 4.1.
+
+  Plugin uses its OWN mock mode (enable_mock_mode) rather than
+  mock_components/GenericSystem, so use_mock_hardware:=true still exercises
+  the real per-joint param parsing and mode assignment.
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <xacro:macro name="sts_position_joint" params="name id lower upper">
     <joint name="${name}">
-      <param name="id">${id}</param>
+      <param name="motor_id">${id}</param>
       <param name="operating_mode">0</param>
       <command_interface name="position">
         <param name="min">${lower}</param>
@@ -47,15 +62,10 @@
     <!-- ================= BUS 1 : left arm + head ================= -->
     <ros2_control name="xlerobot_bus1" type="system">
       <hardware>
-        <xacro:if value="${use_mock_hardware}">
-          <plugin>mock_components/GenericSystem</plugin>
-          <param name="calculate_dynamics">true</param>
-        </xacro:if>
-        <xacro:unless value="${use_mock_hardware}">
-          <plugin>sts_hardware_interface/STSHardwareInterface</plugin>
-          <param name="port">${bus1_port}</param>
-          <param name="baud_rate">1000000</param>
-        </xacro:unless>
+        <plugin>sts_hardware_interface/STSHardwareInterface</plugin>
+        <param name="serial_port">${bus1_port}</param>
+        <param name="baud_rate">1000000</param>
+        <param name="enable_mock_mode">$(arg use_mock_hardware)</param>
       </hardware>
 
       <xacro:if value="${with_arms}">
@@ -78,15 +88,10 @@
     <!-- ================= BUS 2 : right arm + DRIVE WHEELS ================= -->
     <ros2_control name="xlerobot_bus2" type="system">
       <hardware>
-        <xacro:if value="${use_mock_hardware}">
-          <plugin>mock_components/GenericSystem</plugin>
-          <param name="calculate_dynamics">true</param>
-        </xacro:if>
-        <xacro:unless value="${use_mock_hardware}">
-          <plugin>sts_hardware_interface/STSHardwareInterface</plugin>
-          <param name="port">${bus2_port}</param>
-          <param name="baud_rate">1000000</param>
-        </xacro:unless>
+        <plugin>sts_hardware_interface/STSHardwareInterface</plugin>
+        <param name="serial_port">${bus2_port}</param>
+        <param name="baud_rate">1000000</param>
+        <param name="enable_mock_mode">$(arg use_mock_hardware)</param>
       </hardware>
 
       <xacro:if value="${with_arms}">
@@ -98,15 +103,23 @@
         <xacro:sts_position_joint name="right_arm_gripper"       id="6" lower="0.0"   upper="1.75"/>
       </xacro:if>
 
-      <!-- Left motor is mounted mirrored, command has to be negated. Without it
-           x.vel turns the robot and theta.vel drives it forward, upstream says the
-           same. This is the only place the sign is applied.
-           If sts_hardware_interface has no invert param, do it in a small wrapper,
-           not in the URDF axis and not in the controller config. -->
+      <!-- Left motor is mounted mirrored, command has to be negated, otherwise
+           x.vel turns the robot and theta.vel drives it forward.
+
+           Checked the driver source: it has no per-joint invert param. What it
+           does have is a FIXED, uniform CW-to-REP103-CCW inversion applied the
+           same way to every joint (sts_conversions.hpp), which is a different
+           problem (protocol convention) to ours (this robot's mechanical
+           mounting). It doesn't help here.
+
+           Not solved yet. NOT in this file: don't add a fake invert param, it
+           will be silently ignored (joint.parameters.count() just won't find
+           it, no error). Real options are an upstream patch adding a per-joint
+           invert, or a small wrapper class. Left uncorrected on purpose until
+           one of those exists, see ARCHITECTURE.md section 1.2 and 7 (R1). -->
       <joint name="left_wheel_joint">
-        <param name="id">9</param>
+        <param name="motor_id">9</param>
         <param name="operating_mode">1</param>
-        <param name="invert">true</param>
         <command_interface name="velocity">
           <param name="min">${-wmax}</param>
           <param name="max">${wmax}</param>
@@ -120,9 +133,8 @@
       </joint>
 
       <joint name="right_wheel_joint">
-        <param name="id">10</param>
+        <param name="motor_id">10</param>
         <param name="operating_mode">1</param>
-        <param name="invert">false</param>
         <command_interface name="velocity">
           <param name="min">${-wmax}</param>
           <param name="max">${wmax}</param>

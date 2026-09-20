@@ -10,6 +10,12 @@ controller_manager:
   ros__parameters:
     update_rate: 100  # Hz, TODO measure against the actual bus 2 budget
 
+    # Without this, command limits declared on the URDF command_interface
+    # (wheel velocity min/max) are parsed but not enforced, tested this
+    # against a real controller_manager and it logs it plainly otherwise.
+    # Extra safety net on top of whatever the servo bus itself clamps.
+    enforce_command_limits: true
+
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
@@ -40,6 +46,12 @@ diff_drive_controller:
     pose_covariance_diagonal:  [0.001, 0.001, 0.0, 0.0, 0.0, 0.01]
     twist_covariance_diagonal: [0.001, 0.0, 0.0, 0.0, 0.0, 0.01]
 
+    # open_loop:false means this reads wheel POSITION from the hardware
+    # interface, not velocity. Confirmed by reading sts_hardware_interface's
+    # source that it does not unwrap multi-turn position, so this will break
+    # on the first wheel revolution until that's fixed. See ARCHITECTURE §4.1,
+    # §7 R1. Don't tune anything else here until that's sorted, whatever looks
+    # wrong will actually be this.
     open_loop: false
     enable_odom_tf: true
 

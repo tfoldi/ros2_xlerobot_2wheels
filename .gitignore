@@ -3,8 +3,10 @@ build/
 install/
 log/
 
-# vcs-imported community deps, pulled fresh from xlerobot.repos, not tracked here
-# (uncomment package names here if you don't want them in git status noise)
+# vcs-imported community deps, pulled fresh from xlerobot.repos, not tracked here.
+# Names have to match xlerobot.repos, add a line here for anything new in it.
+/src/sts_hardware_interface/
+/src/so_arm_ros2/
 
 __pycache__/
 *.pyc

@@ -233,25 +233,44 @@ Nothing out there covers these, and they are the actual work:
 
 ### 4.1 Odometry and the wrap problem
 
-Biggest unknown in the stack. Read this before writing the hardware config.
+Biggest unknown in the stack, and it is not a guess anymore, confirmed by reading the actual
+driver source (`adityakamath/sts_hardware_interface`, checked 2026-09-20).
 
 `diff_drive_controller` wants wheel position in radians and differences it. STS3215 reports
 `Present_Position` as 12 bit, 0 to 4095, and it wraps. In velocity mode the wheel turns
 continuously, so it wraps about every 0.4 m at r = 0.0635.
 
-`sts_hardware_interface` documents position, velocity, effort, voltage, temperature, current
-and moving status, but says nothing about multi-turn tracking. Three cases:
+The driver does not unwrap it. `read()` pulls the raw encoder register every cycle and maps
+it straight to radians with a pure linear formula, `raw_position_to_radians` in
+`sts_conversions.hpp`, no revolution counter anywhere, and the same code path runs regardless
+of `operating_mode`. So a continuously spinning wheel's exported position state jumps by
+about 2π radians every physical revolution. `diff_drive_controller` differences that every
+control cycle, so odometry breaks the moment the wheel completes one turn, not gradually.
 
-1. It already unwraps → use `diff_drive_controller` as is. Best case.
-2. It doesn't → we add an accumulator. Either upstream a patch (better, it is generally
-   useful and the license allows it) or wrap locally. It has to survive read failures: a
-   dropped packet that looks like a 2000 tick jump must be rejected by a max plausible delta
-   from the commanded velocity, not integrated silently.
-3. Fall back to integrating `Present_Velocity` and accept worse dead reckoning.
+The library's own doc comment explains they used to wrap with `fmod` and deliberately
+removed it, clamping to `[0, 4095]` instead, because the old wrapping mapped negative angles
+to the wrong end of the encoder. That is the right fix for a bounded position-mode joint,
+but it means continuous rotation was never a design target here.
 
-**Test this before building on it.** Jack the robot up, command a slow constant wheel
-velocity, plot reported position over several turns. Twenty minutes, and it decides whether
-odometry is a config file or a sprint.
+Options, in order of preference:
+
+1. Patch upstream: add a per-joint continuous-position accumulator, opt-in so it does not
+   change behaviour for position-mode joints. Contained change, same class of fix the project
+   already made once for the fmod case, and the license allows it.
+2. Wrap locally in a fork, same logic, kept out of tree if upstream is slow.
+3. Fall back to integrating the velocity state interface instead, which is not wrapped
+   (`raw_velocity_to_rad_s` is a straight sign-flip, no windowing), and accept worse dead
+   reckoning than a real position accumulator would give.
+
+Whichever fix, it has to survive read failures: a dropped packet that looks like a 2000 tick
+jump must be rejected by a max-plausible-delta gate derived from commanded velocity, not
+integrated silently.
+
+**Still to do, on real hardware, not just from reading source:** confirm the STS3215's own
+`Present_Position` register actually behaves this way in wheel mode and not some multi-turn
+variant the datasheet doesn't make obvious. Jack the robot up, command a slow constant wheel
+velocity, plot reported position over several turns. Twenty minutes, and it's the difference
+between "apply the known fix" and "there's something else going on."
 
 Either way wheel odometry here is a prior, not truth:
 
@@ -307,6 +326,20 @@ should:
   around 250 ms,
 - clamp commanded acceleration to what the CoM tolerates.
 
+**Don't build any of this around `sts_hardware_interface`'s own `/emergency_stop` service.**
+Checked the source: each bus instance opens its own internal node hardcoded to the name
+`sts_hardware_interface_node` (not configurable), and each advertises `/emergency_stop` on
+that same absolute name. Confirmed live in the two-bus mock test, both instances log creating
+it, plus a rosout warning about the duplicate node name. Two servers under one service name
+means a call only reaches one of them, not both, so it looks like a global e-stop and isn't
+one. With our two buses that's a stop-half-the-robot bug, not a cosmetic one.
+
+Use `controller_manager`'s own `switch_controller` to deactivate everything instead, or just
+rely on `cmd_vel_timeout` plus zero-command on watchdog trip, both of which act uniformly
+across every loaded hardware component. Worth an upstream issue on the node-naming collision
+too, small fix (name the internal node from the hardware component's own `info_.name`, e.g.
+"bus1"/"bus2").
+
 ---
 
 ## 5. Perception, still open
@@ -358,8 +391,8 @@ it **before** tuning Nav2, otherwise the Nav2 gains are just compensating a scal
 
 | # | Risk | Impact | What to do |
 |---|------|--------|------------|
-| R1 | `sts_hardware_interface` doesn't unwrap multi-turn wheel position (§4.1) | Odometry unusable | Test week 1. Patch upstream or wrap locally. Velocity integration as fallback. |
-| R2 | Two bus instances not supported in one `controller_manager` | Core topology broken | Test week 1. Fallbacks: two `controller_manager` instances (also the §4.3 fix), or `feetech_ros2_driver`. |
+| R1 | `sts_hardware_interface` doesn't unwrap multi-turn wheel position (§4.1) | Odometry unusable | **Confirmed by reading the source**, 2026-09-20. Not a guess anymore. Patch upstream or wrap locally, see §4.1. |
+| R2 | Two bus instances not supported in one `controller_manager` | Core topology broken | **Confirmed working**, live mock-mode test, 2026-09-20. Found a real side issue though: both instances share a hardcoded internal node name and collide on `/emergency_stop`, see §4.4. |
 | R3 | Bus 2 contention, arms starve wheel updates | Odometry jitter while manipulating | Instrument from day one. Split controller managers by rate. |
 | R4 | `wheel_radius` really is 0.0635 not 0.05 (§1.4) | 27% distance error | Calibrate first. Never hardcode. |
 | R5 | Gemini unusable for cuVSLAM (§5) | No Isaac VSLAM without buying | VLP-16 + slam_toolbox is enough for navigation. Isaac is an upgrade, not a dependency. |
