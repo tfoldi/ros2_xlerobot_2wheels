@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<!--
+  Placeholder. Real SO-101 xacro is phase 3, joint limits and mesh
+  references pulled from adityakamath/so_arm_ros2 and cross-checked against
+  ros-physical-ai/ros2_so_arm, see ARCHITECTURE §3. This stub just gives
+  with_arms:=true something to attach so the toggle isn't broken.
+  6 joints per arm, matches IDs 1-6 on bus1 (left) / bus2 (right), see
+  ARCHITECTURE §1.1. Straight chain, no real geometry, no meshes.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="so101_arm" params="prefix parent xyz rpy">
+
+    <link name="${prefix}_mount"/>
+    <joint name="${prefix}_mount_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child  link="${prefix}_mount"/>
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+    </joint>
+
+    <xacro:macro name="stub_link" params="name">
+      <link name="${name}">
+        <visual>
+          <geometry><cylinder radius="0.02" length="0.08"/></geometry>
+          <material name="xle_accent"/>
+        </visual>
+        <inertial>
+          <mass value="0.05"/>
+          <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+        </inertial>
+      </link>
+    </xacro:macro>
+
+    <xacro:stub_link name="${prefix}_shoulder_pan_link"/>
+    <xacro:stub_link name="${prefix}_shoulder_lift_link"/>
+    <xacro:stub_link name="${prefix}_elbow_flex_link"/>
+    <xacro:stub_link name="${prefix}_wrist_flex_link"/>
+    <xacro:stub_link name="${prefix}_wrist_roll_link"/>
+    <xacro:stub_link name="${prefix}_gripper_link"/>
+
+    <joint name="${prefix}_shoulder_pan_joint" type="revolute">
+      <parent link="${prefix}_mount"/>
+      <child link="${prefix}_shoulder_pan_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-3.14" upper="3.14" effort="5" velocity="3"/>
+    </joint>
+    <joint name="${prefix}_shoulder_lift_joint" type="revolute">
+      <parent link="${prefix}_shoulder_pan_link"/>
+      <child link="${prefix}_shoulder_lift_link"/>
+      <origin xyz="0 0 0.08" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-1.75" upper="1.75" effort="5" velocity="3"/>
+    </joint>
+    <joint name="${prefix}_elbow_flex_joint" type="revolute">
+      <parent link="${prefix}_shoulder_lift_link"/>
+      <child link="${prefix}_elbow_flex_link"/>
+      <origin xyz="0 0 0.08" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-1.75" upper="1.75" effort="5" velocity="3"/>
+    </joint>
+    <joint name="${prefix}_wrist_flex_joint" type="revolute">
+      <parent link="${prefix}_elbow_flex_link"/>
+      <child link="${prefix}_wrist_flex_link"/>
+      <origin xyz="0 0 0.08" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-1.75" upper="1.75" effort="5" velocity="3"/>
+    </joint>
+    <joint name="${prefix}_wrist_roll_joint" type="revolute">
+      <parent link="${prefix}_wrist_flex_link"/>
+      <child link="${prefix}_wrist_roll_link"/>
+      <origin xyz="0 0 0.08" rpy="0 0 0"/>
+      <axis xyz="1 0 0"/>
+      <limit lower="-3.14" upper="3.14" effort="5" velocity="3"/>
+    </joint>
+    <joint name="${prefix}_gripper_joint" type="revolute">
+      <parent link="${prefix}_wrist_roll_link"/>
+      <child link="${prefix}_gripper_link"/>
+      <origin xyz="0 0 0.08" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="0" upper="1.75" effort="5" velocity="3"/>
+    </joint>
+
+  </xacro:macro>
+</robot>

@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>xlerobot_perception</name>
+  <version>0.0.1</version>
+  <description>
+    Sensor bringup, picked at launch time: none, vlp16, gemini, realsense.
+    Sensor choice is deliberately open, see ADR-0003. This package exists so
+    Nav2 always talks to a LaserScan interface regardless of which sensor is
+    behind it.
+  </description>
+  <maintainer email="tfoldi@xsi.hu">Tamas Foldi</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>pointcloud_to_laserscan</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

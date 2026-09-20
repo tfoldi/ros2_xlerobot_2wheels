@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<!--
+  XLeRobot 0.4.0, two-wheel base.
+
+  Not a port of the upstream URDF. Both upstream ones (ManiSkill and Isaac Sim)
+  hang base_link on a virtual planar joint (root_x / root_y / root_z_rotation),
+  have no wheel links, and still carry 0.3.0 three-omni-wheel geometry.
+  diff_drive_controller can't use that, so the base is modelled properly here.
+
+  Dimensions come from config/robot_dimensions.yaml. Most are not measured yet.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="xlerobot">
+
+  <xacro:arg name="use_ros2_control" default="true"/>
+  <xacro:arg name="use_mock_hardware" default="false"/>
+  <xacro:arg name="bus1_port"         default="/dev/xle-bus1"/>
+  <xacro:arg name="bus2_port"         default="/dev/xle-bus2"/>
+  <!-- none | vlp16 | gemini | realsense, see ADR-0003 -->
+  <xacro:arg name="sensor"            default="none"/>
+  <!-- arms are phase 3, description only for now -->
+  <xacro:arg name="with_arms"         default="false"/>
+
+  <xacro:property name="dims_file" value="$(find xlerobot_description)/config/robot_dimensions.yaml"/>
+  <xacro:property name="dims" value="${xacro.load_yaml(dims_file)['xlerobot']}"/>
+
+  <xacro:include filename="$(find xlerobot_description)/urdf/materials.xacro"/>
+  <xacro:include filename="$(find xlerobot_description)/urdf/base_2wheels.xacro"/>
+  <xacro:include filename="$(find xlerobot_description)/urdf/head_pantilt.xacro"/>
+  <xacro:include filename="$(find xlerobot_description)/urdf/sensors.xacro"/>
+
+  <xacro:xlerobot_base dims="${dims}"/>
+  <xacro:xlerobot_head dims="${dims}" parent="base_link"/>
+  <xacro:xlerobot_sensors sensor="$(arg sensor)" dims="${dims}"/>
+
+  <xacro:if value="$(arg with_arms)">
+    <xacro:include filename="$(find xlerobot_description)/urdf/so101_arm.xacro"/>
+    <!-- TODO mount offsets not measured. 0.4.0 top base allows different arm
+         directions, so this is a build choice, not a constant. -->
+    <xacro:so101_arm prefix="left_arm"  parent="base_link" xyz="0  0.12 0.78" rpy="0 0 0"/>
+    <xacro:so101_arm prefix="right_arm" parent="base_link" xyz="0 -0.12 0.78" rpy="0 0 0"/>
+  </xacro:if>
+
+  <xacro:if value="$(arg use_ros2_control)">
+    <xacro:include filename="$(find xlerobot_description)/urdf/xlerobot.ros2_control.xacro"/>
+    <xacro:xlerobot_ros2_control
+        bus1_port="$(arg bus1_port)"
+        bus2_port="$(arg bus2_port)"
+        use_mock_hardware="$(arg use_mock_hardware)"
+        with_arms="$(arg with_arms)"
+        dims="${dims}"/>
+  </xacro:if>
+
+</robot>

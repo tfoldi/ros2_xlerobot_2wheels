@@ -1,0 +1,11 @@
+# realsense2_camera. D435i/D455, matches the head gimbal mounts upstream
+# already ships. enable_gyro/accel on for the IMU that ARCHITECTURE §4.1
+# wants for odometry fusion.
+camera:
+  ros__parameters:
+    enable_infra1: false
+    enable_infra2: false
+    enable_gyro: true
+    enable_accel: true
+    depth_module.profile: "640x480x30"
+    rgb_camera.profile: "640x480x30"

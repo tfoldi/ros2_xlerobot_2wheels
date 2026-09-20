@@ -1,0 +1,13 @@
+# colcon workspace build artifacts
+build/
+install/
+log/
+
+# vcs-imported community deps, pulled fresh from xlerobot.repos, not tracked here
+# (uncomment package names here if you don't want them in git status noise)
+
+__pycache__/
+*.pyc
+
+.vscode/
+*.swp

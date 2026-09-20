@@ -1,0 +1,16 @@
+# velodyne driver + pointcloud_to_laserscan, collapses the 3D scan to 2D for
+# Nav2. Not tuned yet. min/max height should exclude the robot's own arms
+# once they're in the URDF, otherwise the base sees itself as an obstacle.
+velodyne_driver_node:
+  ros__parameters:
+    device_ip: "192.168.1.201"
+    port: 2368
+    model: VLP16
+
+pointcloud_to_laserscan_node:
+  ros__parameters:
+    target_frame: base_footprint
+    min_height: 0.05
+    max_height: 0.4
+    range_min: 0.3
+    range_max: 100.0

@@ -1,0 +1,140 @@
+<?xml version="1.0"?>
+<!--
+  One hardware interface per serial bus. The split crosses subsystems:
+
+    bus1: left arm 1-6 (position) + head 7-8 (position)
+    bus2: right arm 1-6 (position) + wheels 9-10 (velocity)
+
+  So bus2 runs mixed modes on one UART. sts_hardware_interface does this with a
+  per-joint operating_mode param, which is why we picked it.
+
+  Two things are not verified yet (ARCHITECTURE.md, R1 and R2):
+    - two instances of the plugin under one controller_manager
+    - whether it unwraps multi-turn wheel position. STS3215 position wraps at
+      4096 ticks, about every 0.4 m. diff_drive_controller differences position,
+      so without unwrapping odometry is wrong from the first metre.
+
+  Plugin class name and param names below are guessed from the docs. Check with:
+    ros2 control list_hardware_interfaces
+    grep -r PLUGINLIB_EXPORT_CLASS src/sts_hardware_interface
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="sts_position_joint" params="name id lower upper">
+    <joint name="${name}">
+      <param name="id">${id}</param>
+      <param name="operating_mode">0</param>
+      <command_interface name="position">
+        <param name="min">${lower}</param>
+        <param name="max">${upper}</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+      <!-- safety supervisor uses these -->
+      <state_interface name="temperature"/>
+      <state_interface name="current"/>
+      <state_interface name="voltage"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="xlerobot_ros2_control" params="bus1_port bus2_port use_mock_hardware with_arms dims">
+
+    <xacro:property name="b"      value="${dims['base']}"/>
+    <xacro:property name="h"      value="${dims['head']}"/>
+    <xacro:property name="wmax"   value="${dims['limits']['wheel_max_angular_velocity']}"/>
+
+    <!-- ================= BUS 1 : left arm + head ================= -->
+    <ros2_control name="xlerobot_bus1" type="system">
+      <hardware>
+        <xacro:if value="${use_mock_hardware}">
+          <plugin>mock_components/GenericSystem</plugin>
+          <param name="calculate_dynamics">true</param>
+        </xacro:if>
+        <xacro:unless value="${use_mock_hardware}">
+          <plugin>sts_hardware_interface/STSHardwareInterface</plugin>
+          <param name="port">${bus1_port}</param>
+          <param name="baud_rate">1000000</param>
+        </xacro:unless>
+      </hardware>
+
+      <xacro:if value="${with_arms}">
+        <!-- phase 3. Limits are placeholders, check against
+             adityakamath/so_arm_ros2 and ros-physical-ai/ros2_so_arm -->
+        <xacro:sts_position_joint name="left_arm_shoulder_pan"   id="1" lower="-3.14" upper="3.14"/>
+        <xacro:sts_position_joint name="left_arm_shoulder_lift"  id="2" lower="-1.75" upper="1.75"/>
+        <xacro:sts_position_joint name="left_arm_elbow_flex"     id="3" lower="-1.75" upper="1.75"/>
+        <xacro:sts_position_joint name="left_arm_wrist_flex"     id="4" lower="-1.75" upper="1.75"/>
+        <xacro:sts_position_joint name="left_arm_wrist_roll"     id="5" lower="-3.14" upper="3.14"/>
+        <xacro:sts_position_joint name="left_arm_gripper"        id="6" lower="0.0"   upper="1.75"/>
+      </xacro:if>
+
+      <xacro:sts_position_joint name="head_pan_joint"  id="7"
+                                lower="${h['pan_limit_lower']}"  upper="${h['pan_limit_upper']}"/>
+      <xacro:sts_position_joint name="head_tilt_joint" id="8"
+                                lower="${h['tilt_limit_lower']}" upper="${h['tilt_limit_upper']}"/>
+    </ros2_control>
+
+    <!-- ================= BUS 2 : right arm + DRIVE WHEELS ================= -->
+    <ros2_control name="xlerobot_bus2" type="system">
+      <hardware>
+        <xacro:if value="${use_mock_hardware}">
+          <plugin>mock_components/GenericSystem</plugin>
+          <param name="calculate_dynamics">true</param>
+        </xacro:if>
+        <xacro:unless value="${use_mock_hardware}">
+          <plugin>sts_hardware_interface/STSHardwareInterface</plugin>
+          <param name="port">${bus2_port}</param>
+          <param name="baud_rate">1000000</param>
+        </xacro:unless>
+      </hardware>
+
+      <xacro:if value="${with_arms}">
+        <xacro:sts_position_joint name="right_arm_shoulder_pan"  id="1" lower="-3.14" upper="3.14"/>
+        <xacro:sts_position_joint name="right_arm_shoulder_lift" id="2" lower="-1.75" upper="1.75"/>
+        <xacro:sts_position_joint name="right_arm_elbow_flex"    id="3" lower="-1.75" upper="1.75"/>
+        <xacro:sts_position_joint name="right_arm_wrist_flex"    id="4" lower="-1.75" upper="1.75"/>
+        <xacro:sts_position_joint name="right_arm_wrist_roll"    id="5" lower="-3.14" upper="3.14"/>
+        <xacro:sts_position_joint name="right_arm_gripper"       id="6" lower="0.0"   upper="1.75"/>
+      </xacro:if>
+
+      <!-- Left motor is mounted mirrored, command has to be negated. Without it
+           x.vel turns the robot and theta.vel drives it forward, upstream says the
+           same. This is the only place the sign is applied.
+           If sts_hardware_interface has no invert param, do it in a small wrapper,
+           not in the URDF axis and not in the controller config. -->
+      <joint name="left_wheel_joint">
+        <param name="id">9</param>
+        <param name="operating_mode">1</param>
+        <param name="invert">true</param>
+        <command_interface name="velocity">
+          <param name="min">${-wmax}</param>
+          <param name="max">${wmax}</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+        <state_interface name="temperature"/>
+        <state_interface name="current"/>
+        <state_interface name="voltage"/>
+      </joint>
+
+      <joint name="right_wheel_joint">
+        <param name="id">10</param>
+        <param name="operating_mode">1</param>
+        <param name="invert">false</param>
+        <command_interface name="velocity">
+          <param name="min">${-wmax}</param>
+          <param name="max">${wmax}</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+        <state_interface name="temperature"/>
+        <state_interface name="current"/>
+        <state_interface name="voltage"/>
+      </joint>
+    </ros2_control>
+
+  </xacro:macro>
+</robot>

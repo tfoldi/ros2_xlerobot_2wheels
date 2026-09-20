@@ -1,0 +1,14 @@
+# robot_localization, fuses wheel odometry with an IMU. Not written yet,
+# because which IMU depends on ADR-0003 (Gemini has none, a D435i/D455 has
+# one built in, VLP-16 needs a separate part). See ARCHITECTURE §4.1 for why
+# wheel odometry alone isn't trusted for yaw on this chassis.
+ekf_filter_node:
+  ros__parameters:
+    frequency: 30.0
+    two_d_mode: true
+    odom_frame: odom
+    base_link_frame: base_footprint
+    world_frame: odom
+    # odom0: diff_drive_controller/odom
+    # odom0_config: [false, false, false,  false, false, false,  true, true, false,  false, false, true,  false, false, false]
+    # imu0: <TODO once a sensor is picked>

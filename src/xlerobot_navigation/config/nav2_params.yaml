@@ -1,0 +1,7 @@
+# Nav2 params, not tuned. Nav2's own defaults assume a bigger, faster robot
+# than this one, ARCHITECTURE §1.3 and robot_dimensions.yaml limits give the
+# real ceiling: v_max ~0.25 m/s, wheel_separation ~0.25 m. At minimum the
+# controller server's velocity/acceleration limits and the costmap footprint
+# need to match those before this does anything sane. Left empty on purpose
+# rather than copying a generic tutorial config that would silently violate
+# the servo limits.

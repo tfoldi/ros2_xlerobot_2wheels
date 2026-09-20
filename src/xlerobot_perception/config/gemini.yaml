@@ -1,0 +1,12 @@
+# OrbbecSDK_ROS2, main branch (SDK v1 path), gemini.launch.py claims Jazzy.
+# Whether this camera is actually usable for anything is the open question
+# in ADR-0003, this file exists so the plumbing is ready either way.
+# depth_registration matters a lot here, without it depth_to_laserscan is
+# working off unregistered pixels.
+camera:
+  ros__parameters:
+    depth_registration: true
+    color_width: 640
+    color_height: 480
+    depth_width: 640
+    depth_height: 480

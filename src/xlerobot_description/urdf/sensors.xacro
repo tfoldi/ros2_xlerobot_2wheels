@@ -1,0 +1,91 @@
+<?xml version="1.0"?>
+<!--
+  Sensor mount is sensor agnostic on purpose, see ADR-0003, the choice isn't
+  made yet. sensor arg picks one of: none, vlp16, gemini, realsense.
+  Head mount frame is head_camera_mount, from head_pantilt.xacro.
+  Lidar mount point is a placeholder until we know where it actually goes,
+  might not even be on the head.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="xlerobot_sensors" params="sensor dims">
+
+    <xacro:if value="${sensor == 'realsense'}">
+      <link name="head_camera_link">
+        <visual>
+          <geometry><box size="0.025 0.090 0.025"/></geometry>
+          <material name="xle_black"/>
+        </visual>
+        <inertial>
+          <mass value="0.072"/>
+          <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+        </inertial>
+      </link>
+      <joint name="head_camera_joint" type="fixed">
+        <parent link="head_camera_mount"/>
+        <child  link="head_camera_link"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+      </joint>
+      <!-- REP-103 optical frame, z forward -->
+      <link name="head_camera_optical_frame"/>
+      <joint name="head_camera_optical_joint" type="fixed">
+        <parent link="head_camera_link"/>
+        <child  link="head_camera_optical_frame"/>
+        <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
+      </joint>
+    </xacro:if>
+
+    <xacro:if value="${sensor == 'gemini'}">
+      <!-- same mount point, different body size, see ADR-0003 for whether this
+           camera works on Jazzy at all -->
+      <link name="head_camera_link">
+        <visual>
+          <geometry><box size="0.035 0.165 0.030"/></geometry>
+          <material name="xle_black"/>
+        </visual>
+        <inertial>
+          <mass value="0.12"/>
+          <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+        </inertial>
+      </link>
+      <joint name="head_camera_joint" type="fixed">
+        <parent link="head_camera_mount"/>
+        <child  link="head_camera_link"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+      </joint>
+      <link name="head_camera_optical_frame"/>
+      <joint name="head_camera_optical_joint" type="fixed">
+        <parent link="head_camera_link"/>
+        <child  link="head_camera_optical_frame"/>
+        <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
+      </joint>
+    </xacro:if>
+
+    <xacro:if value="${sensor == 'vlp16'}">
+      <!-- mount point is a guess, VLP-16 is 830g and needs its own bracket,
+           not just bolted to the head like a camera -->
+      <link name="lidar_mount"/>
+      <joint name="lidar_mount_joint" type="fixed">
+        <parent link="base_link"/>
+        <child  link="lidar_mount"/>
+        <origin xyz="0 0 ${dims['base']['body_height'] + 0.05}" rpy="0 0 0"/>
+      </joint>
+      <link name="velodyne">
+        <visual>
+          <geometry><cylinder radius="0.0516" length="0.0717"/></geometry>
+          <material name="xle_black"/>
+        </visual>
+        <inertial>
+          <mass value="0.83"/>
+          <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
+        </inertial>
+      </link>
+      <joint name="lidar_joint" type="fixed">
+        <parent link="lidar_mount"/>
+        <child  link="velodyne"/>
+        <origin xyz="0 0 0.036" rpy="0 0 0"/>
+      </joint>
+    </xacro:if>
+
+  </xacro:macro>
+</robot>

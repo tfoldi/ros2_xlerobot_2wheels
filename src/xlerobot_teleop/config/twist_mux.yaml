@@ -1,0 +1,18 @@
+# twist_mux arbitrates between joystick, nav2, and anything else that wants
+# to drive the base. Joystick always wins over autonomy, that's the point.
+twist_mux:
+  ros__parameters:
+    topics:
+      joystick:
+        topic: cmd_vel_joy
+        timeout: 0.5
+        priority: 100
+      navigation:
+        topic: cmd_vel_nav
+        timeout: 0.5
+        priority: 10
+    locks:
+      estop:
+        topic: e_stop
+        timeout: 0.0
+        priority: 255

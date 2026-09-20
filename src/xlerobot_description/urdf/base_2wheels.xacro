@@ -1,0 +1,130 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- solid box inertia -->
+  <xacro:macro name="box_inertia" params="m x y z">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia ixx="${m*(y*y+z*z)/12.0}" ixy="0" ixz="0"
+               iyy="${m*(x*x+z*z)/12.0}" iyz="0"
+               izz="${m*(x*x+y*y)/12.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <!-- solid cylinder inertia, spin axis is local z -->
+  <xacro:macro name="cylinder_inertia" params="m r h">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia ixx="${m*(3*r*r+h*h)/12.0}" ixy="0" ixz="0"
+               iyy="${m*(3*r*r+h*h)/12.0}" iyz="0"
+               izz="${m*r*r/2.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <xacro:macro name="drive_wheel" params="prefix reflect dims">
+    <xacro:property name="b" value="${dims['base']}"/>
+
+    <link name="${prefix}_wheel_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${b['wheel_radius']}" length="${b['wheel_width']}"/>
+        </geometry>
+        <material name="xle_black"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${b['wheel_radius']}" length="${b['wheel_width']}"/>
+        </geometry>
+      </collision>
+      <xacro:cylinder_inertia m="${b['wheel_mass']}"
+                              r="${b['wheel_radius']}"
+                              h="${b['wheel_width']}"/>
+    </link>
+
+    <!-- Both wheels spin positive forward here. Left motor is mounted mirrored
+         on the real robot, but that sign lives in the ros2_control config, only
+         there. Don't put it in the axis too. -->
+    <joint name="${prefix}_wheel_joint" type="continuous">
+      <parent link="base_link"/>
+      <child  link="${prefix}_wheel_link"/>
+      <origin xyz="${b['axle_x_offset']}
+                   ${reflect * b['wheel_separation'] / 2.0}
+                   ${b['axle_height']}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <dynamics damping="0.02" friction="0.01"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="xlerobot_base" params="dims">
+    <xacro:property name="b" value="${dims['base']}"/>
+
+    <!-- ground projection, Nav2 plans for this (REP-105) -->
+    <link name="base_footprint"/>
+
+    <joint name="base_footprint_joint" type="fixed">
+      <parent link="base_footprint"/>
+      <child  link="base_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- base_link origin is on the floor, between the drive wheels -->
+    <link name="base_link">
+      <visual>
+        <origin xyz="0 0 ${b['body_height']/2.0}" rpy="0 0 0"/>
+        <geometry>
+          <box size="${b['body_length']} ${b['body_width']} ${b['body_height']}"/>
+        </geometry>
+        <material name="xle_grey"/>
+      </visual>
+      <!-- TODO use raskogbody.stl from the upstream Isaac Sim bundle.
+           Box is close enough for costmap work until then. -->
+      <collision>
+        <origin xyz="0 0 ${b['body_height']/2.0}" rpy="0 0 0"/>
+        <geometry>
+          <box size="${b['body_length']} ${b['body_width']} ${b['body_height']}"/>
+        </geometry>
+      </collision>
+      <!-- inertia about the real CoM, not the box centre. Cart is top heavy
+           and this is what sets the accel limits. -->
+      <inertial>
+        <origin xyz="0 0 ${b['com_height']}" rpy="0 0 0"/>
+        <mass value="${b['body_mass']}"/>
+        <inertia
+          ixx="${b['body_mass']*(b['body_width']**2 + b['body_height']**2)/12.0}" ixy="0" ixz="0"
+          iyy="${b['body_mass']*(b['body_length']**2 + b['body_height']**2)/12.0}" iyz="0"
+          izz="${b['body_mass']*(b['body_length']**2 + b['body_width']**2)/12.0}"/>
+      </inertial>
+    </link>
+
+    <xacro:drive_wheel prefix="left"  reflect="1"  dims="${dims}"/>
+    <xacro:drive_wheel prefix="right" reflect="-1" dims="${dims}"/>
+
+    <!-- Caster has no encoder, so it's a fixed sphere and not a joint. A joint
+         would just publish made up numbers. Its scrub when turning in place is
+         part of why yaw needs IMU fusion. -->
+    <link name="caster_link">
+      <visual>
+        <geometry><sphere radius="${b['caster_radius']}"/></geometry>
+        <material name="xle_black"/>
+      </visual>
+      <collision>
+        <geometry><sphere radius="${b['caster_radius']}"/></geometry>
+        <surface><friction><ode><mu>0.05</mu><mu2>0.05</mu2></ode></friction></surface>
+      </collision>
+      <inertial>
+        <mass value="0.05"/>
+        <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+      </inertial>
+    </link>
+
+    <joint name="caster_joint" type="fixed">
+      <parent link="base_link"/>
+      <child  link="caster_link"/>
+      <origin xyz="${b['caster_x_offset']} ${b['caster_y_offset']} ${b['caster_radius']}"
+              rpy="0 0 0"/>
+    </joint>
+
+  </xacro:macro>
+</robot>

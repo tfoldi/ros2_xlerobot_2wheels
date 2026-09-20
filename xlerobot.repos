@@ -1,0 +1,22 @@
+# Community packages this stack depends on, pulled with vcs import.
+# Not vendored in src/ directly since these are third-party and change on
+# their own schedule. See ARCHITECTURE §3 for why each one is here.
+#
+#   vcs import src < xlerobot.repos
+#
+repositories:
+  sts_hardware_interface:
+    type: git
+    url: https://github.com/adityakamath/sts_hardware_interface.git
+    version: main
+    # ros2_control interface for the Feetech bus. The critical dependency,
+    # see ADR-0001. CI tested on Jazzy/Kilted, unverified here: multi-bus
+    # instantiation and multi-turn wheel position (ARCHITECTURE §7 R1/R2).
+
+  so_arm_ros2:
+    type: git
+    url: https://github.com/adityakamath/so_arm_ros2.git
+    version: main
+    # phase 3, reference only for now, joint limits and MoveIt config get
+    # pulled into our own xacro rather than depending on this directly,
+    # see ARCHITECTURE §3. Not needed until arms start.

@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<!--
+  Head pan/tilt, IDs 7 and 8 on bus1. Frame names kept the same as upstream so
+  code written against their URDF still works.
+  TODO swap the boxes for topbase1/2.stl and tophead3/4.stl.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="xlerobot_head" params="dims parent">
+    <xacro:property name="h" value="${dims['head']}"/>
+
+    <link name="head_pan_link">
+      <visual>
+        <geometry><cylinder radius="0.035" length="0.04"/></geometry>
+        <material name="xle_accent"/>
+      </visual>
+      <inertial>
+        <mass value="0.1"/>
+        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
+      </inertial>
+    </link>
+
+    <joint name="head_pan_joint" type="revolute">
+      <parent link="${parent}"/>
+      <child  link="head_pan_link"/>
+      <origin xyz="${h['mount_x']} ${h['mount_y']} ${h['mount_z']}" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="${h['pan_limit_lower']}" upper="${h['pan_limit_upper']}"
+             effort="2.0" velocity="3.0"/>
+    </joint>
+
+    <link name="head_tilt_link">
+      <visual>
+        <geometry><box size="0.06 0.09 0.04"/></geometry>
+        <material name="xle_accent"/>
+      </visual>
+      <inertial>
+        <mass value="0.1"/>
+        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
+      </inertial>
+    </link>
+
+    <joint name="head_tilt_joint" type="revolute">
+      <parent link="head_pan_link"/>
+      <child  link="head_tilt_link"/>
+      <origin xyz="0 0 0.04" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="${h['tilt_limit_lower']}" upper="${h['tilt_limit_upper']}"
+             effort="2.0" velocity="3.0"/>
+    </joint>
+
+    <!-- sensor gets attached here, in sensors.xacro -->
+    <link name="head_camera_mount"/>
+    <joint name="head_camera_mount_joint" type="fixed">
+      <parent link="head_tilt_link"/>
+      <child  link="head_camera_mount"/>
+      <origin xyz="0.03 0 0" rpy="0 0 0"/>
+    </joint>
+  </xacro:macro>
+</robot>

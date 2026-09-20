@@ -1,0 +1,75 @@
+# XLeRobot 0.4.0 two-wheel base, physical dimensions.
+#
+# These are measurements, not constants. Anything marked TODO is a guess and is
+# probably wrong. See ARCHITECTURE.md, calibration section.
+
+xlerobot:
+  base:
+    # --- odometry critical, do these first ---
+    #
+    # Upstream lerobot config has 0.05. But the 0.4.0 build notes say 5 inch
+    # walker wheels, so 127 mm diameter, r = 0.0635. That is 27% off, and every
+    # distance the robot reports depends on it.
+    # TODO drive a measured 5 m line and fix this.
+    wheel_radius: 0.0635
+
+    # Distance between the two wheel contact patches. diff_drive_controller calls
+    # it wheel_separation. Upstream calls it "wheelbase" and ships 0.25, but that
+    # is the wrong axis in car terms.
+    # TODO measure, then check by turning N times in place.
+    wheel_separation: 0.25
+
+    # UMBmark correction if the two wheels are not equal. 1.0 until measured.
+    wheel_radius_scale_left: 1.0
+    wheel_radius_scale_right: 1.0
+
+    wheel_width: 0.030          # TODO
+    wheel_mass: 0.15            # TODO
+
+    # --- chassis ---
+    # IKEA RÅSKOG nominal size. TODO check against the real build with the
+    # printed parts on it.
+    body_length: 0.450
+    body_width:  0.350
+    body_height: 0.780
+
+    # axle height above floor, same as wheel radius unless the mount is recessed
+    axle_height: 0.0635
+
+    # axle offset from base_link, positive is forward. TODO
+    axle_x_offset: 0.0
+
+    # Caster. No encoder on it, so it is a fixed sphere in the URDF.
+    caster_radius: 0.0375       # TODO
+    caster_x_offset: -0.180     # TODO, negative is behind the drive axle
+    caster_y_offset: 0.0
+
+    # Chassis only, no arms, no battery, no payload.
+    # Don't copy the 70.1 kg from the upstream URDF, that is ManiSkill's loaded
+    # cart scene and not this robot.
+    # TODO weigh it.
+    body_mass: 8.0
+    com_height: 0.35            # TODO, this sets the tip over limits
+
+  # --- speed limits ---
+  # From the servo ceiling. Upstream clamps at max_raw = 3000 ticks/s:
+  #   3000 / (4096/360) = 263.7 deg/s = 4.60 rad/s
+  #   v_max = 4.60 * 0.0635 = 0.292 m/s
+  # Keep Nav2 under these.
+  limits:
+    wheel_max_angular_velocity: 4.60   # rad/s, servo limit
+    linear_velocity_max: 0.25          # m/s
+    angular_velocity_max: 1.50         # rad/s
+    # Low on purpose. Tall cart, two arms on top, narrow track.
+    linear_acceleration_max: 0.30      # m/s^2
+    angular_acceleration_max: 1.00     # rad/s^2
+
+  # --- head pan/tilt, IDs 7 and 8 on bus1 ---
+  head:
+    mount_x: 0.0                # TODO
+    mount_y: 0.0
+    mount_z: 0.780
+    pan_limit_lower: -2.09      # rad, TODO check against the mechanical stops
+    pan_limit_upper:  2.09
+    tilt_limit_lower: -0.79
+    tilt_limit_upper:  0.79

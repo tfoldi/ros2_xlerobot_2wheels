@@ -1,0 +1,58 @@
+# controller_manager config for the base. Arm controllers (jtc_left, jtc_right,
+# head controller) get added in phase 3, once the arm joint limits in
+# xlerobot.ros2_control.xacro are real and not placeholders.
+#
+# update_rate here is a starting point, not measured. See ARCHITECTURE §4.3 on
+# bus contention, this may need splitting into two controller_manager instances
+# at different rates once we can measure it.
+
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz, TODO measure against the actual bus 2 budget
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    diff_drive_controller:
+      type: diff_drive_controller/DiffDriveController
+
+diff_drive_controller:
+  ros__parameters:
+    left_wheel_names: ["left_wheel_joint"]
+    right_wheel_names: ["right_wheel_joint"]
+
+    # TODO pull these from robot_dimensions.yaml instead of duplicating them
+    # here. For now keep in sync by hand, and don't trust either copy until
+    # calibrated (ARCHITECTURE §1.4, §6).
+    wheel_separation: 0.25
+    wheel_radius: 0.0635
+
+    # diff_drive_controller doubles wheel_separation internally by design,
+    # this multiplier corrects for track width vs the encoder-derived value.
+    # 1.0 until UMBmark calibration says otherwise.
+    wheel_separation_multiplier: 1.0
+    left_wheel_radius_multiplier: 1.0
+    right_wheel_radius_multiplier: 1.0
+
+    publish_rate: 50.0
+    odom_frame_id: odom
+    base_frame_id: base_footprint
+    pose_covariance_diagonal:  [0.001, 0.001, 0.0, 0.0, 0.0, 0.01]
+    twist_covariance_diagonal: [0.001, 0.0, 0.0, 0.0, 0.0, 0.01]
+
+    open_loop: false
+    enable_odom_tf: true
+
+    # matches the servo ceiling from robot_dimensions.yaml limits, stay under it
+    linear.x.max_velocity: 0.25
+    linear.x.min_velocity: -0.25
+    linear.x.max_acceleration: 0.30
+    linear.x.min_acceleration: -0.30
+    angular.z.max_velocity: 1.50
+    angular.z.min_velocity: -1.50
+    angular.z.max_acceleration: 1.00
+    angular.z.min_acceleration: -1.00
+
+    # tighter than upstream's 500ms host watchdog, see ARCHITECTURE §4.4
+    cmd_vel_timeout: 0.25
+    use_stamped_vel: true
