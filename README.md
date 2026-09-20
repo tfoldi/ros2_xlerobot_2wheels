@@ -31,7 +31,7 @@ A standard ROS 2 autonomy stack on the XLeRobot two-wheel base:
 |---|---|
 | Robot | XLeRobot 0.4.0, two-wheel servo base, IKEA RÅSKOG chassis |
 | Actuators | 16x Feetech STS3215 on 2 half-duplex TTL buses |
-| Compute, deploy | NVIDIA Jetson |
+| Compute, deploy | Jetson Orin NX, currently JetPack 6.2 |
 | Compute, dev | x86-64 + NVIDIA GPU, Ubuntu 24.04 |
 | ROS | Jazzy Jalisco |
 | Sensors | undecided, have a Velodyne VLP-16 and an Orbbec Gemini, a RealSense D435i/D455 is the likely answer for cuVSLAM, see [ARCHITECTURE §5](ARCHITECTURE.md#5-perception-still-open) |

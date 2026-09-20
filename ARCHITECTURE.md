@@ -165,11 +165,23 @@ like the LeKiwi `cleanroom` stack does. I went the other way, for these reasons:
 The cost is real: upstream's teleop scripts, VR interface and recording examples don't work
 against this without changes. Getting them back is phase 5.
 
-### 2.3 Jazzy
+### 2.3 Jazzy, and the JetPack gap on the actual board
 
 Isaac ROS 4.0 dropped Humble and moved to Jazzy, current release is 4.6.0 (Aug 2026). Since
 the point of the Jetson is cuVSLAM / nvblox / cuMotion, NVIDIA picks the distro, not us.
-Jazzy on Ubuntu 24.04, both on the Jetson and the dev box.
+Jazzy on Ubuntu 24.04, both on the dev box and everything non-GPU on the Jetson.
+
+The actual Orin NX is on JetPack 6.2 (L4T 36.4.3, CUDA 12.6). Current Isaac ROS needs
+JetPack 7.2, which only just added Orin NX support in June 2026, Thor only before that. So
+on this board today: the GPU-accelerated Isaac packages that work on 6.2 are Isaac ROS 3.2,
+which is Humble.
+
+That doesn't block phase 1 or 2. Jetson containers bind-mount the host's CUDA/TensorRT
+libraries at runtime, so JetPack version only matters for what actually touches the GPU.
+Plain Jazzy, `ros2_control`, `sts_hardware_interface`, Nav2, `slam_toolbox`, none of that
+needs CUDA, all of it runs on JetPack 6.2 as is. The gap only lands at phase 4, and by then
+either reflash to JetPack 7.2 or run Isaac ROS 3.2 on Humble in a separate container bridged
+over topics. Full reasoning and the two paths in
 [ADR-0002](docs/decisions/0002-jazzy-and-isaac-ros.md).
 
 ---
@@ -354,6 +366,7 @@ it **before** tuning Nav2, otherwise the Nav2 gains are just compensating a scal
 | R6 | Servo thermal limits under long navigation | Shutdown mid mission, maybe damage | Safety supervisor in phase 1, not later (§4.4). |
 | R7 | Top heavy cart tips under hard acceleration | Broken hardware | Conservative accel limits in `diff_drive_controller` and the velocity smoother from the start. |
 | R8 | Upstream says 0.4.0 is the last Feetech / SO101 chassis version | Platform moves to brushless | Keep the hardware behind `ros2_control`, then a brushless base swaps one plugin instead of the stack. The ODrive variant already exists upstream. |
+| R9 | Orin NX is on JetPack 6.2, current Isaac ROS needs 7.2 (§2.3) | No Jazzy cuVSLAM/nvblox without a reflash | Doesn't block phase 1/2, plain Jazzy runs on 6.2 fine. Decide reflash vs Humble side-container at phase 4, see ADR-0002. |
 
 ---
 
@@ -373,7 +386,8 @@ self collision and arm vs base geometry.
 Done when: MoveIt plans and executes on both arms.
 
 **Phase 4, Isaac.** cuVSLAM replacing or fusing with slam_toolbox, nvblox costmap layer,
-cuMotion for the arms. Jetson deployment with Isaac ROS containers.
+cuMotion for the arms. First decision here is JetPack: reflash the Orin NX to 7.2 for Jazzy,
+or run Isaac ROS 3.2 on Humble in a separate container, see ADR-0002.
 Done when: phase 2 and 3 parity on the Jetson.
 
 **Phase 5, lerobot comes back.** A ROS 2 node exposing this stack as a `lerobot` robot so
