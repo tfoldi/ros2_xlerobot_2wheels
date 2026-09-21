@@ -7,13 +7,23 @@ of the real bus (or sts_hardware_interface's mock mode), see docs/sim-twin.md.
 bus1_port/bus2_port are ignored in that case. The Isaac Sim scene needs to
 be playing (Play pressed in the GUI, or app_utils.play() in a script) for
 its side of the ROS 2 bridge to actually publish/subscribe anything.
+
+teleop:=true also brings up xlerobot_teleop's joystick/twist_mux/safety
+supervisor stack (xlerobot_teleop/launch/teleop.launch.py), off by default
+so a plain bringup doesn't grab a joystick device or start the safety
+watchdog when nothing needs it. The watchdog engages e_stop until this
+bringup's own joint_state_broadcaster is actually publishing, so there's
+no real ordering issue bringing both up together this way, unlike running
+teleop.launch.py standalone before bringup is up.
 """
 
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -22,14 +32,17 @@ from launch_ros.parameter_descriptions import ParameterValue
 def generate_launch_description():
     description_share = get_package_share_directory("xlerobot_description")
     bringup_share = get_package_share_directory("xlerobot_bringup")
+    teleop_share = get_package_share_directory("xlerobot_teleop")
 
     xacro_file = os.path.join(description_share, "urdf", "xlerobot.urdf.xacro")
     controllers_yaml = os.path.join(bringup_share, "config", "controllers.yaml")
+    teleop_launch_file = os.path.join(teleop_share, "launch", "teleop.launch.py")
 
     bus1_port = LaunchConfiguration("bus1_port")
     bus2_port = LaunchConfiguration("bus2_port")
     use_mock_hardware = LaunchConfiguration("use_mock_hardware")
     use_sim = LaunchConfiguration("use_sim")
+    teleop = LaunchConfiguration("teleop")
 
     robot_description = ParameterValue(
         Command([
@@ -49,6 +62,7 @@ def generate_launch_description():
         DeclareLaunchArgument("bus2_port", default_value="/dev/xle-bus2"),
         DeclareLaunchArgument("use_mock_hardware", default_value="false"),
         DeclareLaunchArgument("use_sim", default_value="false"),
+        DeclareLaunchArgument("teleop", default_value="false"),
 
         Node(
             package="robot_state_publisher",
@@ -70,5 +84,10 @@ def generate_launch_description():
             package="controller_manager",
             executable="spawner",
             arguments=["diff_drive_controller"],
+        ),
+
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(teleop_launch_file),
+            condition=IfCondition(teleop),
         ),
     ])
