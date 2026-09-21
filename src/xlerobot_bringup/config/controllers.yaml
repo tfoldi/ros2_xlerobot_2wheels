@@ -2,13 +2,21 @@
 # head controller) get added in phase 3, once the arm joint limits in
 # xlerobot.ros2_control.xacro are real and not placeholders.
 #
-# update_rate here is a starting point, not measured. See ARCHITECTURE §4.3 on
-# bus contention, this may need splitting into two controller_manager instances
-# at different rates once we can measure it.
+# update_rate: worked out the wire budget instead of guessing. SYNC_READ_FEEDBACK_LEN
+# is 15 bytes (registers 56-70), so an 8-motor bus at 1Mbps is roughly:
+#   SyncRead request + 8 responses  ~184 bytes ~1.84ms
+#   SyncWrite                       ~56 bytes  ~0.56ms
+#   round trip                      ~2.4ms  -> ~400Hz on the wire alone
+# 200 is a starting point with real headroom under that, not the ceiling. The
+# actual bottleneck is more likely the USB-serial adapter's latency_timer
+# (FTDI/CH340/CP2102 often default to 16ms per USB transaction on Linux,
+# capping effective rate around 60Hz regardless of update_rate) than the
+# servo protocol. Check /sys/bus/usb-serial/devices/*/latency_timer on the
+# real hardware before assuming this number is real. See ARCHITECTURE §4.3.
 
 controller_manager:
   ros__parameters:
-    update_rate: 100  # Hz, TODO measure against the actual bus 2 budget
+    update_rate: 200  # Hz, still a starting point, needs a bench measurement
 
     # Without this, command limits declared on the URDF command_interface
     # (wheel velocity min/max) are parsed but not enforced, tested this

@@ -302,17 +302,36 @@ right, so keep those names.
 
 ### 4.3 Bus budget
 
-Half duplex TTL at 1 Mbps. A sync read of N motors is one packet out, N back. With arms idle
-bus 2 only carries the two wheels, fine at 200 Hz. With an arm streaming a trajectory at
-100 Hz the two interleave and the wheel update rate drops.
+Half duplex TTL at 1 Mbps. A sync read of N motors is one packet out, N back. Worked out the
+actual numbers instead of guessing: `sts_hardware_interface`'s `SYNC_READ_FEEDBACK_LEN` is
+15 bytes (registers 56 through 70), so for an 8-motor bus (bus 1 and bus 2 both carry 8):
+
+```
+SyncRead request + 8 responses   ~184 bytes  ~1.84 ms
+SyncWrite                        ~56 bytes   ~0.56 ms
+round trip                       ~2.4 ms     -> ~400 Hz on the wire alone
+```
+
+So the servo protocol itself supports well above the 200 Hz `controller_manager` is set to.
+The real ceiling is more likely the USB-serial adapter, not the wire: FTDI/CH340/CP2102
+chips commonly default their Linux `latency_timer` to 16 ms per USB transaction, which caps
+effective round-trip rate around 60 Hz regardless of what the servo protocol allows. Check
+`/sys/bus/usb-serial/devices/*/latency_timer` on the real hardware before trusting either
+number.
+
+With arms idle bus 2 only carries the two wheels. With an arm streaming a trajectory at the
+same rate, arm and wheel traffic interleave on the sync read/write and the wheel update rate
+drops, proportionally to how many joints share the bus, not by much else.
 
 If measurement shows this matters: run the two buses in **separate** `controller_manager`
-instances at different rates, base at 200 Hz and arms at 50 Hz, instead of one manager stuck
-at the lowest common rate. That is why the hardware interfaces are two independent
-`<ros2_control>` blocks from the start, it keeps the option open.
+instances at different rates, base fast and arms slower, instead of one manager stuck at the
+lowest common rate. That is why the hardware interfaces are two independent `<ros2_control>`
+blocks from the start, it keeps the option open.
 
-Measure first. The `sts_hardware_interface` diagnostics node plus `controller_manager` timing
-stats should answer it on day one.
+Still needs a real bench measurement. The wire-protocol math and the latency_timer caveat are
+both reasoning from source and from how these USB-serial chips generally behave, not from a
+scope on the actual bus. The `sts_hardware_interface` diagnostics node plus `controller_manager`
+timing stats should answer it for real once there's hardware to run it on.
 
 ### 4.4 Safety
 
