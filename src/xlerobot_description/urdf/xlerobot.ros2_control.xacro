@@ -8,26 +8,23 @@
   So bus2 runs mixed modes on one UART. sts_hardware_interface does this with a
   per-joint operating_mode param, which is why we picked it.
 
-  Checked against the real driver source and a live two-bus mock test
-  (adityakamath/sts_hardware_interface, read 2026-09-20):
+  Two instances of this plugin under one controller_manager work: both
+  buses load, configure, and activate cleanly (adityakamath/sts_hardware_interface).
+  One gotcha: each instance opens its own internal node hardcoded to the
+  name "sts_hardware_interface_node" (src/sts_hardware_interface.cpp:622),
+  and both advertise /emergency_stop on that same absolute name. Two
+  servers, one service name, so calling /emergency_stop only reaches one
+  bus, not both. Don't build the safety supervisor around that service,
+  see ARCHITECTURE.md section 4.4.
 
-    R2, two instances under one controller_manager: works. Tested with mock
-    mode, both buses loaded/configured/activated clean. One real gotcha
-    though: each instance opens its own internal node hardcoded to the name
-    "sts_hardware_interface_node" (src/sts_hardware_interface.cpp:622), and
-    both advertise /emergency_stop on that same absolute name. Two servers,
-    one service name, so calling /emergency_stop only reaches one bus, not
-    both. Don't build the safety supervisor around that service, see
-    ARCHITECTURE.md section 4.4.
-
-    R1, multi-turn wheel position: confirmed broken for our case. The driver
-    reads the raw encoder register every cycle and maps it straight to
-    radians (sts_conversions.hpp: raw_position_to_radians), no revolution
-    counter, same code path for every operating_mode. A continuously
-    spinning wheel wraps every physical turn (~0.4m here), diff_drive_controller
-    differences that position, so odometry breaks on the first wrap. Needs
-    either an upstream patch or our own unwrapping layer before this can feed
-    diff_drive_controller, see ARCHITECTURE.md section 4.1.
+  Multi-turn wheel position does not unwrap. The driver reads the raw
+  encoder register every cycle and maps it straight to radians
+  (sts_conversions.hpp: raw_position_to_radians), no revolution counter,
+  same code path for every operating_mode. A continuously spinning wheel
+  wraps every physical turn (~0.4m here), diff_drive_controller differences
+  that position, so odometry breaks on the first wrap. Needs either an
+  upstream patch or a local unwrapping layer before this can feed
+  diff_drive_controller, see ARCHITECTURE.md section 4.1.
 
   Plugin uses its OWN mock mode (enable_mock_mode) rather than
   mock_components/GenericSystem, so use_mock_hardware:=true still exercises

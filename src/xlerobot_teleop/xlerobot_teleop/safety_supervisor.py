@@ -2,23 +2,21 @@
 """Watches per-joint temperature and current from sts_hardware_interface and
 stops the robot before something cooks or stalls. See ARCHITECTURE §4.4.
 
-Checked against the driver source: temperature/current/voltage are exported
-as custom-named state interfaces, not the standard position/velocity/effort
-triple. joint_state_broadcaster can't put those in sensor_msgs/JointState,
-there's no field for them, they go out on /dynamic_joint_states instead
-(control_msgs/DynamicJointState). Still not wired up, this reads that topic
-now instead of guessing at JointState, but the actual threshold logic below
-is still a placeholder.
+temperature/current/voltage are exported as custom-named state interfaces,
+not the standard position/velocity/effort triple. joint_state_broadcaster
+can't put those in sensor_msgs/JointState, there's no field for them, they
+go out on /dynamic_joint_states instead (control_msgs/DynamicJointState).
+This subscribes to that topic; the threshold logic below is still a
+placeholder.
 
-Still Python/rclpy for now. Rust (rclrs) is the plan for our own nodes, this
-one included, but rclrs on Jazzy has open install/build issues as of writing
-and this stub isn't load-bearing yet, so the toolchain switch is its own
-piece of work, not bundled into this slice.
+Rust (rclrs) is the target for nodes written for this project; this one is
+still Python/rclpy since rclrs on Jazzy has open install/build issues and
+this stub isn't load-bearing yet.
 
-Also don't wire trigger_estop to sts_hardware_interface's own
-/emergency_stop service. Confirmed live: with two bus instances that service
-name collides, a call only reaches one bus. Use controller_manager's
-switch_controller to deactivate everything instead, see ARCHITECTURE §4.4.
+Don't wire trigger_estop to sts_hardware_interface's own /emergency_stop
+service: with two bus instances that service name collides, a call only
+reaches one bus. Use controller_manager's switch_controller to deactivate
+everything instead, see ARCHITECTURE §4.4.
 """
 
 import rclpy

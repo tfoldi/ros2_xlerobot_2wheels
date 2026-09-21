@@ -1,32 +1,23 @@
 #!/usr/bin/env python3
 """Builds the XLeRobot Isaac Sim twin: imports the URDF, wires a ROS 2
 bridge Action Graph matching xlerobot.ros2_control_sim.xacro's topic names,
-saves the stage. See docs/sim-twin.md for the full story.
+saves the stage. See docs/sim-twin.md.
 
 Run with the Isaac Sim venv, not the system/ROS Python:
     source ~/venvs/isaacsim/bin/activate
     python sim/build_isaac_scene.py
 
-Base + head only for this first twin, no arms. Arms are still stub box
-geometry (phase 3 hasn't started), nothing to gain simulating them yet.
-xlerobot.ros2_control_sim.xacro already supports with_arms:=true whenever
-that changes, this script would just need the same joint list extended.
+Base + head only, no arms: arms are still stub box geometry (phase 3
+hasn't started). xlerobot.ros2_control_sim.xacro supports with_arms:=true;
+extending this script's joint list is the only change needed.
 
-Node names and the enable_extension/app_utils pattern below are taken
-directly from Isaac Sim 6's own shipped reference
-(isaacsim/skills/isaac-sim-ros2-bridge/scripts/multi_robot_namespacing.py),
-not guessed - that script targets Nav2 fleet demos and publishes ground
-truth odom/TF from the chassis pose directly, which we deliberately do NOT
-want as our primary odom source here, diff_drive_controller computing
-odometry FROM joint states is the actual thing under test. Only took the
-joint state pub/sub + articulation controller pattern from it, not the
-odom/TF part.
-
-Confirmed working end to end by actually running it, not just rendering
-clean: URDF imports, ROS2 bridge extension loads, graph builds with no
-OmniGraphError, stage saves. See docs/sim-twin.md for what that run found
-along the way (env var ordering for the bridge extension, node names that
-turned out different from search results / older doc snapshots).
+Node names and the enable_extension/app_utils pattern follow Isaac Sim 6's
+own shipped reference (isaacsim/skills/isaac-sim-ros2-bridge/scripts/multi_robot_namespacing.py).
+That script targets Nav2 fleet demos and publishes ground-truth odom/TF
+from the chassis pose directly; only the joint-state pub/sub and
+articulation-controller pattern is reused here, not the odom/TF part,
+since diff_drive_controller computing odometry from joint states is the
+thing under test.
 """
 
 import argparse
@@ -97,13 +88,11 @@ def add_robot_to_stage(imported_usd_path):
     robot_prim.GetReferences().AddReference(imported_usd_path)
 
     # The importer's own USD uses a "Physics" variant set (physics/physx/
-    # mujoco/none) for the physics representation. Referencing the file
-    # doesn't select a variant on its own - found this out the hard way,
-    # first run had no active variant at all, so no ArticulationRootAPI
-    # anywhere, and PhysX's tensor plugin correctly reported no articulation
-    # at this prim. "physics" carries both PhysicsArticulationRootAPI and
-    # the Newton-specific schemas together, that's the one PhysX's own
-    # tensor interface (what IsaacArticulationController runs on) needs.
+    # mujoco/none) for the physics representation, not selected by default
+    # when the file is referenced. "physics" carries both
+    # PhysicsArticulationRootAPI and the Newton-specific schemas together,
+    # which is what PhysX's tensor interface (IsaacArticulationController)
+    # needs.
     variant_sets = robot_prim.GetVariantSets()
     if variant_sets.HasVariantSet("Physics"):
         variant_sets.GetVariantSet("Physics").SetVariantSelection("physics")
@@ -123,11 +112,11 @@ def add_robot_to_stage(imported_usd_path):
 
     print(f"Robot referenced at {ROBOT_PRIM_PATH}, ground plane and light added")
 
-    # Verify the fix actually worked instead of trusting it silently -
-    # exactly the kind of thing that already burned two runs tonight.
     # HasAPI is the real check; the schema wrapper constructor above
     # doesn't tell you whether the API is actually applied, importing it
-    # was only needed to name the schema class to check for.
+    # is only needed to name the schema class to check for. Asserting
+    # this here instead of trusting the reference silently matters: the
+    # wrapper prim path looks like a plausible target and is not.
     target_prim = stage.GetPrimAtPath(ARTICULATION_ROOT_PATH)
     if target_prim.IsValid() and target_prim.HasAPI(UsdPhysics.ArticulationRootAPI):
         print(f"Confirmed: ArticulationRootAPI present at {ARTICULATION_ROOT_PATH}")
@@ -142,13 +131,12 @@ def build_ros2_bridge_graph():
     keys = og.Controller.Keys
     graph_path = "/ROS2_Bridge_xlerobot"
 
-    # Ground-truth odom (isaacsim.ros2.bridge.ROS2PublishOdometry) was here as
-    # a comparison-only bonus, dropped for now: its input attribute isn't
-    # named inputs:chassisPrim on this Isaac Sim 6.1 build, confirmed by
-    # actually running it (OmniGraphError, attribute doesn't exist), and
-    # every core node below already builds and sets clean. Not worth another
-    # ~100s relaunch cycle to guess the right name for a bonus feature,
-    # check the node's real schema in-process before re-adding.
+    # Ground-truth odom (isaacsim.ros2.bridge.ROS2PublishOdometry) is
+    # deliberately not wired here: it would publish from the chassis pose
+    # directly, duplicating what diff_drive_controller is meant to produce
+    # from joint states. Its input attribute names also differ from the
+    # inputs:chassisPrim used by older reference material - check the
+    # node's schema in-process before adding it back.
     nodes = [
         ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
         ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),

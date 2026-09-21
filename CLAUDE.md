@@ -16,9 +16,9 @@ Quick facts:
   (ros-controls, official), NOT sts_hardware_interface's mock mode. Launch
   xacro with `use_sim:=true` for this path, see
   xlerobot_description/urdf/xlerobot.ros2_control_sim.xacro.
-- The Omniverse MCP server (github.com/serionist/omniverse-mcp, a
-  colleague's tool) is registered in ~/Developer/XLeRobot/.mcp.json. Below
-  is its own AI guide, copied in per its README's setup instructions.
+- The Omniverse MCP server (github.com/serionist/omniverse-mcp) is
+  registered in ~/Developer/XLeRobot/.mcp.json. Its AI guide is copied in
+  below per its README's setup instructions.
 - The sim twin does NOT reproduce R1 (the STS3215 encoder wrap bug), that's
   real-hardware-only. It's for everything else.
 
