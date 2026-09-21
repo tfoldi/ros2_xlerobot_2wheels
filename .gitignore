@@ -14,3 +14,9 @@ __pycache__/
 
 .vscode/
 *.swp
+
+# Isaac Sim twin: generated, regenerate with sim/build_isaac_scene.py
+# (which itself regenerates xlerobot_import.urdf from the xacro first,
+# see docs/sim-twin.md). Not source, don't commit either.
+/sim/xlerobot_import.urdf
+/sim/output/
