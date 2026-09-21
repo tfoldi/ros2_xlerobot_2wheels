@@ -206,6 +206,7 @@ As of September 2026, licenses included.
 | VLP-16 driver | `velodyne` (ros2 branch) | BSD | If used. |
 | Orbbec camera | [`OrbbecSDK_ROS2`](https://github.com/orbbec/OrbbecSDK_ROS2) | Apache-2.0 | Conditional, see §5. |
 | Similar robot | [`robotmindio/cleanroom`](https://github.com/robotmindio/cleanroom) | Apache-2.0 | **Read it, don't import it.** Closest thing out there: Jazzy, Feetech driven LeKiwi, Nav2, RTAB-Map. Uses the ZMQ bridge we rejected so the driver layer doesn't transfer, but the Nav2 tuning, safety supervisor and RTAB-Map config are useful. Their finding that lidar ICP beat visual loop closure in feature poor corridors is worth knowing. |
+| USB device naming | [`Grigorij-Dudnik/RoboCrew`](https://github.com/Grigorij-Dudnik/RoboCrew) | MIT | **Ported.** `tools/xlerobot_setup_usb_modules.py` is RoboCrew's `robocrew_setup_usb_modules` device-detection and udev rule generation, adapted for the two Feetech buses (`xle-bus1`/`xle-bus2`) instead of RoboCrew's own camera/mic/arm layout. |
 
 ### 3.1 What we have to write
 

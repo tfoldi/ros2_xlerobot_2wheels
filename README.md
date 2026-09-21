@@ -121,13 +121,20 @@ So bus 2 runs position and velocity mode servos at the same time on one UART, an
 traffic competes with arm traffic. `sts_hardware_interface` supports per-joint operating
 modes, which is why it was picked.
 
-Pin the ports with udev, `/dev/ttyACM0` and `ttyACM1` swap on reboot:
+`/dev/ttyACM0` and `ttyACM1` swap on reboot. Pin them with:
 
+```bash
+sudo python3 tools/xlerobot_setup_usb_modules.py
 ```
-# /etc/udev/rules.d/99-xlerobot.rules  (fill in your own serials)
-SUBSYSTEM=="tty", ATTRS{idVendor}=="...", ATTRS{serial}=="...", SYMLINK+="xle-bus1"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="...", ATTRS{serial}=="...", SYMLINK+="xle-bus2"
-```
+
+Prompts to disconnect both buses, then connect each in turn, and writes
+`/etc/udev/rules.d/99-xlerobot.rules` for `/dev/xle-bus1` and `/dev/xle-bus2`
+itself, matched by USB physical port and serial rather than by hand. Also
+scans for cameras and microphones, so the same tool covers a depth camera's
+device name later (type `a` at the prompt to add one). Device detection and
+udev rule generation ported from
+[RoboCrew](https://github.com/Grigorij-Dudnik/RoboCrew)'s
+`robocrew_setup_usb_modules` (MIT licensed).
 
 `tools/check_feetech_bus.py` scans a bus and reports which IDs answer, useful for figuring
 out which cable is which.
