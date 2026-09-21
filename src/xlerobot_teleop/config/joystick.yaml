@@ -9,3 +9,8 @@ teleop_twist_joy_node:
     scale_angular.yaw: 1.50 # matches angular_velocity_max
     enable_button: 4        # left bumper, deadman switch, deliberate choice
     require_enable_button: true
+    # twist_mux (installed version) subscribes TwistStamped only, not plain
+    # Twist. Without this, teleop_twist_joy publishes unstamped by default
+    # and the message never reaches twist_mux, mismatched types don't
+    # connect, no error either.
+    publish_stamped_twist: true
