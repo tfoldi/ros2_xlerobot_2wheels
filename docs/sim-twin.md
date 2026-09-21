@@ -125,6 +125,7 @@ authoritative.
 | `sim/xlerobot_import.urdf` | Generated. Plain URDF for the Isaac Sim importer, rendered from the xacro with `use_ros2_control:=false` and `with_arms:=false`. Gitignored. |
 | `sim/build_isaac_scene.py` | Imports the URDF, builds the ROS 2 bridge graph, saves the stage. |
 | `sim/output/` | Generated. `xlerobot_twin.usd` is the scene to open in Isaac Sim. Gitignored. |
+| `sim/launch_gui.py` | Opens a given USD stage in the interactive Isaac Sim GUI (not headless). Defaults to `sim/output/xlerobot_twin.usd`. |
 
 Regenerate the import URDF after xacro changes:
 
@@ -145,6 +146,29 @@ python sim/build_isaac_scene.py
 Topic names are duplicated between `xlerobot.ros2_control_sim.xacro` and
 `build_isaac_scene.py` rather than derived from one source; keep them in
 sync manually when either changes.
+
+## Viewing a scene interactively
+
+```bash
+source ~/venvs/isaacsim/bin/activate
+export ROS_DISTRO=jazzy
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/venvs/isaacsim/lib/python3.12/site-packages/isaacsim/exts/isaacsim.ros2.core/jazzy/lib
+python sim/launch_gui.py [path/to/stage.usd]
+```
+
+Requires a display. Opens the given stage, or `sim/output/xlerobot_twin.usd`
+by default, and stays open until the window is closed.
+
+The current scene uses placeholder box/cylinder visual geometry, not the
+robot's real meshes — `base_2wheels.xacro` and `head_pantilt.xacro` do not
+yet reference the mesh files bundled with upstream XLeRobot
+(`simulation/Isaac_sim/xlerobot.zip` in the XLeRobot repo). For a visual
+reference of the physical robot's actual appearance, that bundle's own
+`xlerobot/xlerobot/xlerobot.usd` can be opened with the same script; note
+that it is upstream's 0.3.0 three-wheel model (virtual planar base joint,
+no real wheel links) and is not wired to the ROS 2 bridge graph described
+above.
 
 ## Known limitations
 
@@ -191,5 +215,8 @@ Setup:
 
 - Validate topic content with the simulation running continuously.
 - Address the joint stiffness/damping gap.
+- Reference the real meshes from upstream's Isaac Sim bundle in
+  `base_2wheels.xacro` and `head_pantilt.xacro` in place of the current
+  placeholder geometry.
 - Extend the scene to include the arms once phase 3 starts.
 - Migrate off the deprecated `ROS2PublishJointState.inputs:targetPrim`.
