@@ -13,6 +13,14 @@
 
   <xacro:arg name="use_ros2_control" default="true"/>
   <xacro:arg name="use_mock_hardware" default="false"/>
+  <!-- Isaac Sim twin, see docs/sim-twin.md. Different code path from
+       use_mock_hardware: mock is sts_hardware_interface's own no-op mode,
+       this is a real joint_state_topic_hardware_interface talking to a
+       physics sim over topics. Mutually exclusive with use_mock_hardware,
+       and with bus1_port/bus2_port/with_arms split, sim uses one combined
+       hardware component for all joints since there's no physical bus to
+       split by. -->
+  <xacro:arg name="use_sim"           default="false"/>
   <xacro:arg name="bus1_port"         default="/dev/xle-bus1"/>
   <xacro:arg name="bus2_port"         default="/dev/xle-bus2"/>
   <!-- none | vlp16 | gemini | realsense, see ADR-0003 -->
@@ -41,13 +49,19 @@
   </xacro:if>
 
   <xacro:if value="$(arg use_ros2_control)">
-    <xacro:include filename="$(find xlerobot_description)/urdf/xlerobot.ros2_control.xacro"/>
-    <xacro:xlerobot_ros2_control
-        bus1_port="$(arg bus1_port)"
-        bus2_port="$(arg bus2_port)"
-        use_mock_hardware="$(arg use_mock_hardware)"
-        with_arms="$(arg with_arms)"
-        dims="${dims}"/>
+    <xacro:unless value="$(arg use_sim)">
+      <xacro:include filename="$(find xlerobot_description)/urdf/xlerobot.ros2_control.xacro"/>
+      <xacro:xlerobot_ros2_control
+          bus1_port="$(arg bus1_port)"
+          bus2_port="$(arg bus2_port)"
+          use_mock_hardware="$(arg use_mock_hardware)"
+          with_arms="$(arg with_arms)"
+          dims="${dims}"/>
+    </xacro:unless>
+    <xacro:if value="$(arg use_sim)">
+      <xacro:include filename="$(find xlerobot_description)/urdf/xlerobot.ros2_control_sim.xacro"/>
+      <xacro:xlerobot_ros2_control_sim with_arms="$(arg with_arms)" dims="${dims}"/>
+    </xacro:if>
   </xacro:if>
 
 </robot>

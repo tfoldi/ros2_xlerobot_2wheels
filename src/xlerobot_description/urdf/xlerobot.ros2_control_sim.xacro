@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<!--
+  Isaac Sim digital twin, see docs/sim-twin.md. Not the physical robot's
+  ros2_control config, that's xlerobot.ros2_control.xacro. Kept as a
+  separate file rather than a branch inside the real one because the
+  topology is genuinely different, one combined hardware component instead
+  of two buses, no serial port, no operating_mode, no mirrored-wheel sign
+  problem (Isaac Sim doesn't care which way a motor is physically bolted).
+
+  Uses joint_state_topic_hardware_interface (ros-controls, official,
+  Jazzy supported), NOT sts_hardware_interface's own mock mode. Different
+  purpose: mock mode is "no bus, don't crash", this is "real physics stands
+  in for the bus", enough to actually exercise diff_drive_controller's
+  odometry math, Nav2, and the safety supervisor against real (simulated)
+  physical response, not just a compile-time sanity check.
+
+  sum_wrapped_joint_states is on because Isaac Sim wraps continuous joint
+  position too, +-2pi convention, not the same convention as the real
+  STS3215 (0 to 4095 steps), but the same class of problem as ARCHITECTURE
+  section 4.1 / R1. Worth a look at this package's own unwrap code before
+  finishing the sts_hardware_interface patch, it's a working reference
+  for the same problem.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- matches which command interface each joint actually gets claimed by
+       on the real robot: wheels are velocity (diff_drive_controller), arms
+       and head are position (joint_trajectory_controller). Declaring both
+       on every joint like a lot of example configs do is sloppy, doesn't
+       match the real robot's own ros2_control block, and the whole point
+       of this twin is testing that real config, not a generic one. -->
+  <xacro:macro name="sim_position_joint" params="name initial_position:=0.0">
+    <joint name="${name}">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">${initial_position}</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="sim_velocity_joint" params="name">
+    <joint name="${name}">
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="xlerobot_ros2_control_sim" params="with_arms dims">
+
+    <ros2_control name="xlerobot_sim" type="system">
+      <hardware>
+        <plugin>joint_state_topic_hardware_interface/JointStateTopicSystem</plugin>
+        <param name="joint_commands_topic">/isaac_joint_commands</param>
+        <param name="joint_states_topic">/isaac_joint_states</param>
+        <param name="sum_wrapped_joint_states">true</param>
+      </hardware>
+
+      <xacro:sim_velocity_joint name="left_wheel_joint"/>
+      <xacro:sim_velocity_joint name="right_wheel_joint"/>
+
+      <xacro:sim_position_joint name="head_pan_joint"/>
+      <xacro:sim_position_joint name="head_tilt_joint"/>
+
+      <xacro:if value="${with_arms}">
+        <xacro:sim_position_joint name="left_arm_shoulder_pan_joint"/>
+        <xacro:sim_position_joint name="left_arm_shoulder_lift_joint"/>
+        <xacro:sim_position_joint name="left_arm_elbow_flex_joint"/>
+        <xacro:sim_position_joint name="left_arm_wrist_flex_joint"/>
+        <xacro:sim_position_joint name="left_arm_wrist_roll_joint"/>
+        <xacro:sim_position_joint name="left_arm_gripper_joint"/>
+
+        <xacro:sim_position_joint name="right_arm_shoulder_pan_joint"/>
+        <xacro:sim_position_joint name="right_arm_shoulder_lift_joint"/>
+        <xacro:sim_position_joint name="right_arm_elbow_flex_joint"/>
+        <xacro:sim_position_joint name="right_arm_wrist_flex_joint"/>
+        <xacro:sim_position_joint name="right_arm_wrist_roll_joint"/>
+        <xacro:sim_position_joint name="right_arm_gripper_joint"/>
+      </xacro:if>
+    </ros2_control>
+
+  </xacro:macro>
+</robot>

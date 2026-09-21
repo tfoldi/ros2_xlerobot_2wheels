@@ -7,6 +7,7 @@ log/
 # Names have to match xlerobot.repos, add a line here for anything new in it.
 /src/sts_hardware_interface/
 /src/so_arm_ros2/
+/src/topic_based_hardware_interfaces/
 
 __pycache__/
 *.pyc
