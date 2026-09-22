@@ -17,16 +17,76 @@ no real ordering issue bringing both up together this way, unlike running
 teleop.launch.py standalone before bringup is up.
 """
 
+import glob
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+
+
+def _find_port_holders(port_path):
+    """PIDs (with cmdline) that currently have port_path open, or [] if free.
+
+    sts_hardware_interface's SCS::syncReadBegin isn't safe against a second
+    process opening the same serial port mid-configure - confirmed on this
+    robot: it doesn't error, it segfaults controller_manager (heap
+    corruption inside the vendor SDK's read buffer setup). That's exactly
+    what happens if a previous bringup hasn't fully released the port yet
+    (e.g. Ctrl-C then an immediate relaunch) - the old process is still
+    dying when the new one opens the same device. Catch that here, before
+    ros2_control_node ever starts, instead of after it crashes.
+    """
+    if not os.path.exists(port_path):
+        return []
+    real_path = os.path.realpath(port_path)
+    holders = []
+    for fd_dir in glob.glob("/proc/[0-9]*/fd"):
+        pid = fd_dir.split("/")[2]
+        try:
+            for fd in os.listdir(fd_dir):
+                if os.path.realpath(os.path.join(fd_dir, fd)) == real_path:
+                    try:
+                        with open(f"/proc/{pid}/cmdline", "rb") as f:
+                            cmdline = f.read().replace(b"\0", b" ").decode(errors="replace").strip()
+                    except OSError:
+                        cmdline = "?"
+                    holders.append((pid, cmdline))
+                    break
+        except OSError:
+            continue  # process exited while we were scanning it, not a real holder
+    return holders
+
+
+def _check_serial_ports_free(context, *args, **kwargs):
+    use_sim = LaunchConfiguration("use_sim").perform(context) == "true"
+    use_mock_hardware = LaunchConfiguration("use_mock_hardware").perform(context) == "true"
+    if use_sim or use_mock_hardware:
+        return []  # no real serial port gets opened in either mode
+
+    with_head = LaunchConfiguration("with_head").perform(context) == "true"
+    ports = [LaunchConfiguration("bus2_port").perform(context)]
+    if with_head:
+        ports.append(LaunchConfiguration("bus1_port").perform(context))
+
+    problems = []
+    for port in ports:
+        for pid, cmdline in _find_port_holders(port):
+            problems.append(f"  {port} is already open by pid {pid}: {cmdline}")
+
+    if problems:
+        raise RuntimeError(
+            "Refusing to start bringup: a real servo bus port is still held open by "
+            "another process (a previous bringup that hasn't fully exited yet is the "
+            "usual cause - wait a couple seconds after Ctrl-C before relaunching):\n"
+            + "\n".join(problems)
+        )
+    return []
 
 
 def generate_launch_description():
@@ -68,6 +128,12 @@ def generate_launch_description():
         # off by default: bus1 (head pan/tilt) isn't wired on a base-only
         # robot, see xlerobot.urdf.xacro. Flip on once the head is plugged in.
         DeclareLaunchArgument("with_head", default_value="false"),
+
+        # Must run before the Node actions below: OpaqueFunction is resolved
+        # synchronously at this point in the list, so a raised error here
+        # aborts the launch before ros2_control_node ever spawns and touches
+        # the port. See _check_serial_ports_free's docstring.
+        OpaqueFunction(function=_check_serial_ports_free),
 
         Node(
             package="robot_state_publisher",

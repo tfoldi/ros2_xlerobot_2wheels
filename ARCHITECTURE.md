@@ -105,11 +105,18 @@ distance between the driven wheels, which is what `diff_drive_controller` calls
 So both are calibration results, not constants. They live in
 `xlerobot_description/config/robot_dimensions.yaml` with a procedure in §6.
 
+`wheel_radius` is now a direct measurement (0.0625 m, 125 mm wheel diameter) and passed a
+1 m straight-line odometry check on the real robot (reported vs. tape measured, within
+~1 cm) after the position-unwrap fix in §4.1/§7 R1 - no scale correction needed at that
+distance. Still worth the full 5 m+ run from §6 for a tighter number; a 1 m check has more
+relative measurement error to hide behind.
+
 ### 1.5 Chassis
 
-IKEA RÅSKOG cart, two driven wheels and a caster. The caster has no encoder. In the URDF it
-is a fixed link with a low friction sphere, not a steerable joint, because a joint would only
-publish invented numbers.
+IKEA RÅSKOG cart, two driven wheels on their own axle bar plus the stock cart's original
+four generic casters (front and rear pairs), all still there - see `base_2wheels.xacro`.
+None of the casters have an encoder. In the URDF each is a fixed link with a low friction
+sphere, not a steerable joint, because a joint would only publish invented numbers.
 
 The thing is tall and top heavy, two 6-DOF arms and a head above a narrow track. CoM height
 is a real limit on acceleration.
@@ -244,44 +251,34 @@ Nothing out there covers these, and they are the actual work:
 
 ### 4.1 Odometry and the wrap problem
 
-Biggest known risk in the stack. Based on the driver source
-(`adityakamath/sts_hardware_interface`), not an assumption.
-
 `diff_drive_controller` wants wheel position in radians and differences it. STS3215 reports
 `Present_Position` as 12 bit, 0 to 4095, and it wraps. In velocity mode the wheel turns
-continuously, so it wraps about every 0.4 m at r = 0.0635.
+continuously, so it wraps about every 0.39 m at r = 0.0625 (measured, see §1.4).
 
-The driver does not unwrap it. `read()` pulls the raw encoder register every cycle and maps
-it straight to radians with a pure linear formula, `raw_position_to_radians` in
-`sts_conversions.hpp`, no revolution counter anywhere, and the same code path runs regardless
-of `operating_mode`. So a continuously spinning wheel's exported position state jumps by
-about 2π radians every physical revolution. `diff_drive_controller` differences that every
-control cycle, so odometry breaks the moment the wheel completes one turn, not gradually.
+Fixed locally in the vendored copy (`src/sts_hardware_interface`, not upstream - it's
+in-tree here, not a submodule): `read()` unwraps `MODE_VELOCITY` joints by accumulating the
+wrap-safe delta between consecutive single-turn readings (if the raw angle jumps by more
+than π between cycles, treat it as a wrap and fold it back into [-π, π] before adding it to
+a running total) instead of reporting the raw 2π-periodic angle directly.
+`MODE_SERVO`/`MODE_PWM` joints are untouched - they have real position limits inside one
+revolution already, where the old fmod-then-clamp behavior is correct.
 
-The library's own doc comment explains they used to wrap with `fmod` and deliberately
-removed it, clamping to `[0, 4095]` instead, because the old wrapping mapped negative angles
-to the wrong end of the encoder. That is the right fix for a bounded position-mode joint,
-but it means continuous rotation was never a design target here.
+Confirmed on real hardware, not just from reading source: driving the base past the old
+~0.39 m wrap boundary shows `/joint_states` position climbing smoothly with no discontinuity,
+and a 1 m odometry-tracked drive (§1.4) matched a tape measurement.
 
-Options, in order of preference:
+Safety margin against aliasing: the unwrap assumes no more than half a revolution happens
+between consecutive `read()` cycles. At `wheel_max_angular_velocity` (4.6 rad/s) and the
+100 Hz control loop, one cycle covers ~0.046 rad - nowhere near the π that would make a real
+revolution look like standing still.
 
-1. Patch upstream: add a per-joint continuous-position accumulator, opt-in so it does not
-   change behaviour for position-mode joints. Contained change, same class of fix the project
-   already made once for the fmod case, and the license allows it.
-2. Wrap locally in a fork, same logic, kept out of tree if upstream is slow.
-3. Fall back to integrating the velocity state interface instead, which is not wrapped
-   (`raw_velocity_to_rad_s` is a straight sign-flip, no windowing), and accept worse dead
-   reckoning than a real position accumulator would give.
-
-Whichever fix, it has to survive read failures: a dropped packet that looks like a 2000 tick
-jump must be rejected by a max-plausible-delta gate derived from commanded velocity, not
-integrated silently.
-
-**Still to do, on real hardware, not just from reading source:** confirm the STS3215's own
-`Present_Position` register actually behaves this way in wheel mode and not some multi-turn
-variant the datasheet doesn't make obvious. Jack the robot up, command a slow constant wheel
-velocity, plot reported position over several turns. Twenty minutes, and it's the difference
-between "apply the known fix" and "there's something else going on."
+Still open: a dropped/failed SyncRead is already safe (`read()` skips that motor for the
+cycle and keeps its last known state, doesn't feed anything into the unwrap). What isn't
+guarded is a transaction that succeeds (right byte count, no comm error) but carries a
+corrupted payload from electrical noise - unlike the old raw-only behavior, which
+self-healed back to the true single-turn value every cycle, a bad delta here permanently
+offsets the running total, since it accumulates. A max-plausible-delta gate derived from
+commanded velocity would catch that; not yet built.
 
 Either way wheel odometry here is a prior, not truth:
 
@@ -428,10 +425,10 @@ it **before** tuning Nav2, otherwise the Nav2 gains are just compensating a scal
 
 | # | Risk | Impact | What to do |
 |---|------|--------|------------|
-| R1 | `sts_hardware_interface` doesn't unwrap multi-turn wheel position (§4.1) | Odometry unusable | Patch upstream or wrap locally, see §4.1. |
+| R1 | ~~`sts_hardware_interface` doesn't unwrap multi-turn wheel position~~ Fixed locally, confirmed on hardware (§4.1) | No unwrap gate against corrupted-but-valid reads yet | Add a max-plausible-delta check, see §4.1 "Still open". |
 | R2 | Both hardware instances share a hardcoded internal node name and collide on `/emergency_stop` | One instance's e-stop doesn't reach the other bus | Don't build the safety supervisor around this service; use `controller_manager`'s `switch_controller` instead, see §4.4. |
 | R3 | Bus 2 contention, arms starve wheel updates | Odometry jitter while manipulating | Instrument from day one. Split controller managers by rate. |
-| R4 | `wheel_radius` really is 0.0635 not 0.05 (§1.4) | 27% distance error | Calibrate first. Never hardcode. |
+| R4 | ~~`wheel_radius` really is 0.0635 not 0.05~~ Measured (0.0625) and spot-checked at 1 m (§1.4) | Only the full 5 m+ calibration run from §6 is still outstanding | Run the §6 procedure before trusting odometry past a few meters. |
 | R5 | Gemini unusable for cuVSLAM (§5) | No Isaac VSLAM without buying | VLP-16 + slam_toolbox is enough for navigation. Isaac is an upgrade, not a dependency. |
 | R6 | Servo thermal limits under long navigation | Shutdown mid mission, maybe damage | Safety supervisor in phase 1, not later (§4.4). |
 | R7 | Top heavy cart tips under hard acceleration | Broken hardware | Conservative accel limits in `diff_drive_controller` and the velocity smoother from the start. |
