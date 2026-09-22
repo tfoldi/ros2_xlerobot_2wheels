@@ -45,7 +45,7 @@ import sys
 import time
 from pathlib import Path
 
-MODE = os.environ.get("MODE", "0660")
+MODE = os.environ.get("MODE", "0666")
 GROUP = os.environ.get("GROUP", "dialout")
 RULES_PATH = "/etc/udev/rules.d/99-xlerobot.rules"
 

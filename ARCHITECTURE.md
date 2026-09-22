@@ -57,11 +57,21 @@ v_left  = (v - ω·L/2) / r          left raw command is negated
 v_right = (v + ω·L/2) / r
 ```
 
-The negation is physical, not a frame choice. The left motor is mounted mirrored. Upstream's
-comment says without it `x.vel` turns the robot and `theta.vel` drives it forward.
+The negation is physical, not a frame choice: upstream's own robot has its left motor mounted
+mirrored, and without correcting for it `x.vel` turns the robot and `theta.vel` drives it forward.
 
-Here the sign goes in the `ros2_control` joint config, once. The URDF axis stays honest and
-`diff_drive_controller` sees two wheels that both spin positive forward. Don't apply it twice.
+This build is not the same wheel: confirmed on the real robot by driving each wheel
+individually through a raw `velocity_controllers/JointGroupVelocityController` (bypassing
+`diff_drive_controller`) and watching which way it turned. Same command sign, opposite result
+from upstream - **this robot's right motor is the mirrored one**, not the left. Don't assume
+either side without testing; it's a mechanical fact of the specific build, not something you
+can derive from the URDF or upstream's docs.
+
+The sign goes in `diff_drive_controller`'s `right_wheel_radius_multiplier: -1.0`
+(`controllers.yaml`), not the `ros2_control` joint config - `sts_hardware_interface` has no
+per-joint invert param (checked its source), so this is the only layer that can apply it. A
+negative radius flips both the outgoing command and the odometry reading for that wheel
+consistently. The URDF axis stays honest either way; don't apply the correction twice.
 
 ### 1.3 Raw units
 
@@ -313,12 +323,20 @@ SyncWrite                        ~56 bytes   ~0.56 ms
 round trip                       ~2.4 ms     -> ~400 Hz on the wire alone
 ```
 
-So the servo protocol itself supports well above the 200 Hz `controller_manager` is set to.
-The real ceiling is more likely the USB-serial adapter, not the wire: FTDI/CH340/CP2102
-chips commonly default their Linux `latency_timer` to 16 ms per USB transaction, which caps
-effective round-trip rate around 60 Hz regardless of what the servo protocol allows. Check
-`/sys/bus/usb-serial/devices/*/latency_timer` on the real hardware before trusting either
-number.
+So the servo protocol itself supports well above the 100 Hz `controller_manager` is set to.
+That number is not bus-limited: it is set by the host's real-time loop budget, not the wire.
+`controller_manager` runs its update loop on a regular (non-RT) desktop or Jetson kernel by
+default, and 200 Hz (a 5 ms budget) overruns under ordinary scheduling jitter, particularly
+with Isaac Sim's own GPU/CPU load competing for the same cores. 100 Hz (10 ms budget) has
+headroom against that regardless of which hardware interface is loaded underneath (real bus,
+mock, or the Isaac Sim topic bridge). Raising it again needs an RT kernel or isolated cores,
+not just a bus-budget argument.
+
+Separately, the USB-serial adapter itself has its own ceiling on the real bus: FTDI/CH340/
+CP2102 chips commonly default their Linux `latency_timer` to 16 ms per USB transaction, which
+caps effective round-trip rate around 60 Hz regardless of what the servo protocol or the host
+loop allow. Check `/sys/bus/usb-serial/devices/*/latency_timer` on the real hardware before
+trusting either number.
 
 With arms idle bus 2 only carries the two wheels. With an arm streaming a trajectory at the
 same rate, arm and wheel traffic interleave on the sync read/write and the wheel update rate

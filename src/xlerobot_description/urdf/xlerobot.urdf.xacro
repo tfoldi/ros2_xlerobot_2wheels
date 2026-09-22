@@ -27,6 +27,11 @@
   <xacro:arg name="sensor"            default="none"/>
   <!-- arms are phase 3, description only for now -->
   <xacro:arg name="with_arms"         default="false"/>
+  <!-- head pan/tilt (bus1, motor_id 7/8) is phase 3 too - not wired on the
+       robot yet. Without this, bus1's ros2_control component still gets
+       declared for head_pan/head_tilt alone and tries to open bus1_port,
+       which doesn't exist until the head is actually plugged in. -->
+  <xacro:arg name="with_head"         default="false"/>
 
   <xacro:property name="dims_file" value="$(find xlerobot_description)/config/robot_dimensions.yaml"/>
   <xacro:property name="dims" value="${xacro.load_yaml(dims_file)['xlerobot']}"/>
@@ -56,6 +61,7 @@
           bus2_port="$(arg bus2_port)"
           use_mock_hardware="$(arg use_mock_hardware)"
           with_arms="$(arg with_arms)"
+          with_head="$(arg with_head)"
           dims="${dims}"/>
     </xacro:unless>
     <xacro:if value="$(arg use_sim)">

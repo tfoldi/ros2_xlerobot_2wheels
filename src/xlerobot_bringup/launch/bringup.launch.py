@@ -43,6 +43,7 @@ def generate_launch_description():
     use_mock_hardware = LaunchConfiguration("use_mock_hardware")
     use_sim = LaunchConfiguration("use_sim")
     teleop = LaunchConfiguration("teleop")
+    with_head = LaunchConfiguration("with_head")
 
     robot_description = ParameterValue(
         Command([
@@ -53,6 +54,7 @@ def generate_launch_description():
             " bus1_port:=", bus1_port,
             " bus2_port:=", bus2_port,
             " with_arms:=false",
+            " with_head:=", with_head,
         ]),
         value_type=str,
     )
@@ -63,6 +65,9 @@ def generate_launch_description():
         DeclareLaunchArgument("use_mock_hardware", default_value="false"),
         DeclareLaunchArgument("use_sim", default_value="false"),
         DeclareLaunchArgument("teleop", default_value="false"),
+        # off by default: bus1 (head pan/tilt) isn't wired on a base-only
+        # robot, see xlerobot.urdf.xacro. Flip on once the head is plugged in.
+        DeclareLaunchArgument("with_head", default_value="false"),
 
         Node(
             package="robot_state_publisher",
