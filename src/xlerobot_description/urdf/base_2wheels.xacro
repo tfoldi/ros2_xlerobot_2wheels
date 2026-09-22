@@ -57,6 +57,41 @@
     </joint>
   </xacro:macro>
 
+  <!-- Four generic casters, not two: the stock RASKOG cart's original four
+       wheels are all still there - the drive wheels are an addition on
+       their own extended axle bar, not a replacement for any of them (see
+       the photo this was built from). A single centered caster, or just a
+       rear pair, would both be wrong - this is front pair + rear pair, all
+       four passive. No encoder on any of them, so each is a fixed sphere
+       and not a joint - a joint would just publish made up numbers. Their
+       scrub when turning in place is part of why yaw needs IMU fusion. -->
+  <xacro:macro name="caster" params="prefix reflect x_offset dims">
+    <xacro:property name="b" value="${dims['base']}"/>
+
+    <link name="${prefix}_caster_link">
+      <visual>
+        <geometry><sphere radius="${b['caster_radius']}"/></geometry>
+        <material name="xle_black"/>
+      </visual>
+      <collision>
+        <geometry><sphere radius="${b['caster_radius']}"/></geometry>
+        <surface><friction><ode><mu>0.05</mu><mu2>0.05</mu2></ode></friction></surface>
+      </collision>
+      <inertial>
+        <mass value="0.05"/>
+        <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+      </inertial>
+    </link>
+
+    <joint name="${prefix}_caster_joint" type="fixed">
+      <parent link="base_link"/>
+      <child  link="${prefix}_caster_link"/>
+      <origin xyz="${x_offset}
+                   ${reflect * b['caster_y_offset']}
+                   ${b['caster_radius']}" rpy="0 0 0"/>
+    </joint>
+  </xacro:macro>
+
   <xacro:macro name="xlerobot_base" params="dims">
     <xacro:property name="b" value="${dims['base']}"/>
 
@@ -71,15 +106,32 @@
 
     <!-- base_link origin is on the floor, between the drive wheels -->
     <link name="base_link">
+      <!-- raskogbody.stl, from upstream's own Isaac Sim asset bundle
+           (Apache-2.0, simulation/Isaac_sim/xlerobot.zip), same IKEA RASKOG
+           cart this robot is built on. The offset here is derived, not
+           measured: upstream's reference URDF places this mesh at
+           xyz="-0.01668 0.502 0.515" rpy="90 0 0" relative to their own
+           "chassis" link, whose wheel joints sit at xyz="-0.15 +-0.225 -0.32"
+           and whose floor height comes from its floating joint to world
+           (z=0.38). Re-expressing that mesh offset relative to OUR base_link
+           (floor level, at the midpoint between the wheels) gives
+           xyz="0.13332 0.502 0.895" - visually verify once this is open in
+           Isaac Sim and nudge if it's off; this wasn't checked against the
+           real robot's actual proportions, only against upstream's own
+           reference numbers. Does NOT include upstream's raskogwheel1/2.stl
+           sub-meshes deliberately: those depict the stock cart's original
+           four casters at their stock 0.45m track, which is narrower than
+           this robot's actual 0.55m custom drive-wheel track (measured) -
+           including them would draw a second, wrong-width pair of wheels
+           overlapping the real ones modeled below. -->
       <visual>
-        <origin xyz="0 0 ${b['body_height']/2.0}" rpy="0 0 0"/>
+        <origin xyz="0.13332 0.502 0.895" rpy="${pi/2} 0 0"/>
         <geometry>
-          <box size="${b['body_length']} ${b['body_width']} ${b['body_height']}"/>
+          <mesh filename="package://xlerobot_description/meshes/raskogbody.stl"
+                scale="0.0009 0.001 0.0009"/>
         </geometry>
         <material name="xle_grey"/>
       </visual>
-      <!-- TODO use raskogbody.stl from the upstream Isaac Sim bundle.
-           Box is close enough for costmap work until then. -->
       <collision>
         <origin xyz="0 0 ${b['body_height']/2.0}" rpy="0 0 0"/>
         <geometry>
@@ -101,30 +153,10 @@
     <xacro:drive_wheel prefix="left"  reflect="1"  dims="${dims}"/>
     <xacro:drive_wheel prefix="right" reflect="-1" dims="${dims}"/>
 
-    <!-- Caster has no encoder, so it's a fixed sphere and not a joint. A joint
-         would just publish made up numbers. Its scrub when turning in place is
-         part of why yaw needs IMU fusion. -->
-    <link name="caster_link">
-      <visual>
-        <geometry><sphere radius="${b['caster_radius']}"/></geometry>
-        <material name="xle_black"/>
-      </visual>
-      <collision>
-        <geometry><sphere radius="${b['caster_radius']}"/></geometry>
-        <surface><friction><ode><mu>0.05</mu><mu2>0.05</mu2></ode></friction></surface>
-      </collision>
-      <inertial>
-        <mass value="0.05"/>
-        <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
-      </inertial>
-    </link>
-
-    <joint name="caster_joint" type="fixed">
-      <parent link="base_link"/>
-      <child  link="caster_link"/>
-      <origin xyz="${b['caster_x_offset']} ${b['caster_y_offset']} ${b['caster_radius']}"
-              rpy="0 0 0"/>
-    </joint>
+    <xacro:caster prefix="rear_left"   reflect="1"  x_offset="${b['caster_rear_x_offset']}"  dims="${dims}"/>
+    <xacro:caster prefix="rear_right"  reflect="-1" x_offset="${b['caster_rear_x_offset']}"  dims="${dims}"/>
+    <xacro:caster prefix="front_left"  reflect="1"  x_offset="${b['caster_front_x_offset']}" dims="${dims}"/>
+    <xacro:caster prefix="front_right" reflect="-1" x_offset="${b['caster_front_x_offset']}" dims="${dims}"/>
 
   </xacro:macro>
 </robot>

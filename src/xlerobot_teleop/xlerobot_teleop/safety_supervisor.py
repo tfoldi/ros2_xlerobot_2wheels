@@ -44,6 +44,7 @@ class SafetySupervisor(Node):
         self.create_subscription(
             DynamicJointState, "dynamic_joint_states", self.on_dynamic_joint_states, 10)
         self.last_msg_time = None
+        self.estop_latched = False
         self.create_timer(0.1, self.check_watchdog)
         self.get_logger().info("safety supervisor up, watchdog %.2fs" % WATCHDOG_TIMEOUT_S)
 
@@ -56,15 +57,20 @@ class SafetySupervisor(Node):
         pass
 
     def check_watchdog(self):
+        # twist_mux's estop lock (timeout: 0.0) never expires on its own -
+        # it only changes on a new message. Publish current health on every
+        # tick, not just on the trip, so a recovered joint_states stream
+        # actually clears the lock instead of leaving it stuck forever.
         if self.last_msg_time is None:
             return
         age = (self.get_clock().now() - self.last_msg_time).nanoseconds / 1e9
-        if age > WATCHDOG_TIMEOUT_S:
-            self.trigger_estop("no joint_states for %.2fs" % age)
-
-    def trigger_estop(self, reason: str):
-        self.get_logger().error("e-stop: %s" % reason)
-        self.estop_pub.publish(Bool(data=True))
+        stale = age > WATCHDOG_TIMEOUT_S
+        if stale and not self.estop_latched:
+            self.get_logger().error("e-stop: no joint_states for %.2fs" % age)
+        elif not stale and self.estop_latched:
+            self.get_logger().info("e-stop cleared, joint_states resumed")
+        self.estop_latched = stale
+        self.estop_pub.publish(Bool(data=stale))
 
 
 def main():

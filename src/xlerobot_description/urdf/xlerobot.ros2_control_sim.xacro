@@ -29,6 +29,20 @@
        on every joint like a lot of example configs do is sloppy, doesn't
        match the real robot's own ros2_control block, and the whole point
        of this twin is testing that real config, not a generic one. -->
+  <!-- effort is declared on every joint below even though Isaac Sim has no
+       real torque feedback for it: controller_manager's enforce_command_limits
+       builds a JointSaturationLimiter per joint regardless of whether that
+       joint has an effort limit, and it reads the effort state interface
+       unconditionally - without it, the read cycle throws
+       "requested state interface not found" and controller_manager
+       deactivates everything. Matches xlerobot.ros2_control.xacro's real
+       joints, which all export effort via sts_hardware_interface anyway.
+
+       initial_value 0.0 on effort matters here: Isaac Sim's ROS2PublishJointState
+       node doesn't populate JointState.effort, and joint_state_topic_hardware_interface
+       only calls set_state() for effort when that array is non-empty, so
+       without an explicit initial value the interface would sit at
+       ros2_control's own NaN default forever instead of a real number. -->
   <xacro:macro name="sim_position_joint" params="name initial_position:=0.0">
     <joint name="${name}">
       <command_interface name="position"/>
@@ -36,29 +50,77 @@
         <param name="initial_value">${initial_position}</param>
       </state_interface>
       <state_interface name="velocity"/>
+      <state_interface name="effort">
+        <param name="initial_value">0.0</param>
+      </state_interface>
     </joint>
   </xacro:macro>
 
   <xacro:macro name="sim_velocity_joint" params="name">
     <joint name="${name}">
       <command_interface name="velocity"/>
-      <state_interface name="position"/>
-      <state_interface name="velocity"/>
+      <!-- initial_value matters more here than it looks: sum_wrapped_joint_states
+           computes each new position as a delta against get_state()'s previous
+           value to unwrap Isaac's +-2pi convention. Without an initial_value,
+           that previous value starts at ros2_control's NaN default, the first
+           delta computation poisons it to NaN, and since the result is written
+           straight back with set_state(), every following cycle reads NaN as
+           "previous" too - a permanent stuck state, not a startup race. -->
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="effort">
+        <param name="initial_value">0.0</param>
+      </state_interface>
     </joint>
   </xacro:macro>
 
   <xacro:macro name="xlerobot_ros2_control_sim" params="with_arms dims">
 
-    <ros2_control name="xlerobot_sim" type="system">
+    <!-- Split into two hardware components, one per command-interface type,
+         not one combined block like an earlier version of this file had.
+         joint_state_topic_hardware_interface's write() pushes every joint's
+         name unconditionally but only appends to position/velocity/effort
+         for the command interfaces that joint actually declares - mixing
+         velocity-commanded wheels with position-commanded head/arm joints
+         in one component produced a JointState message with a 4-entry name
+         array next to 2-entry position/velocity arrays, silently
+         misaligning the indices. Isaac Sim's ROS2SubscribeJointState node
+         correctly refuses that ("size of position, velocity and effort
+         arrays match the number of actuators") rather than guess. Keeping
+         each component homogeneous (all-velocity or all-position) means
+         its arrays are always either full-length or fully empty, which is
+         what sensor_msgs/JointState actually promises. Same reasoning as
+         the real robot's two-bus split, different underlying cause.
+
+         joint_states_topic (read side) stays the single shared
+         /isaac_joint_states for both: JointStateTopicSystem::read() looks
+         up each incoming name against its own joints and skips anything it
+         doesn't recognize, so one combined state message covering every
+         joint is fine to share - only the outgoing command side has the
+         strict per-array-length problem. -->
+    <ros2_control name="xlerobot_sim_wheels" type="system">
       <hardware>
         <plugin>joint_state_topic_hardware_interface/JointStateTopicSystem</plugin>
-        <param name="joint_commands_topic">/isaac_joint_commands</param>
+        <param name="joint_commands_topic">/isaac_wheel_commands</param>
         <param name="joint_states_topic">/isaac_joint_states</param>
         <param name="sum_wrapped_joint_states">true</param>
       </hardware>
 
       <xacro:sim_velocity_joint name="left_wheel_joint"/>
       <xacro:sim_velocity_joint name="right_wheel_joint"/>
+    </ros2_control>
+
+    <ros2_control name="xlerobot_sim_position" type="system">
+      <hardware>
+        <plugin>joint_state_topic_hardware_interface/JointStateTopicSystem</plugin>
+        <param name="joint_commands_topic">/isaac_position_commands</param>
+        <param name="joint_states_topic">/isaac_joint_states</param>
+        <param name="sum_wrapped_joint_states">true</param>
+      </hardware>
 
       <xacro:sim_position_joint name="head_pan_joint"/>
       <xacro:sim_position_joint name="head_tilt_joint"/>

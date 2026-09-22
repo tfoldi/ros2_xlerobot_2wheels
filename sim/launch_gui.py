@@ -13,14 +13,40 @@ Defaults to sim/output/xlerobot_twin.usd if no path is given. A .urdf path
 is converted to USD first (into sim/output/, alongside build_isaac_scene.py's
 own output) rather than opened directly - USD cannot open URDF files, only
 the importer can read them. Stays open until the window is closed.
+
+Closing the window does not reliably stop the underlying process for a
+plain SimulationApp script like this one (a Kit/Omniverse limitation, the
+window-close handler isn't wired to process exit outside the full editor
+app). Use Ctrl+C in the terminal, or `kill <pid>`, not `kill -9`: SIGKILL
+skips Python cleanup entirely and can leave GPU memory held by the dead
+process until reboot.
+
+A SIGTERM handler that raises KeyboardInterrupt does not work here: Kit's
+extension loader wraps each extension's import in a broad except clause
+(to keep one broken extension from taking down the app) and that swallows
+the interrupt if it lands mid-load, which is likely since extension setup
+takes a few seconds. Instead the handler only sets a flag, and the main
+loop below checks it once per frame - by that point control is back in
+our own code, past any of Kit's internal except blocks, so shutdown always
+reaches the try/finally and simulation_app.close() actually runs.
 """
 
 import os
+import signal
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_STAGE_PATH = os.path.join(REPO_ROOT, "sim", "output", "xlerobot_twin.usd")
 USD_OUTPUT_DIR = os.path.join(REPO_ROOT, "sim", "output")
+
+# Not part of this repo - github.com/serionist/omniverse-mcp, cloned
+# separately. Registered here (add_path + enable) rather than through
+# Window > Extensions in the UI: that dialog has had focus-stealing issues
+# on this machine where typing in the search/path field goes to the main
+# window instead, making the manual one-time setup impossible to complete.
+# Doing it in code sidesteps the UI entirely and needs no interaction.
+OMNIVERSE_MCP_EXTENSION_PATH = os.path.expanduser("~/Developer/omniverse-mcp/extension")
+OMNIVERSE_MCP_EXTENSION_NAME = "isaacsim.mcp.bridge"
 
 
 def convert_urdf(urdf_path):
@@ -39,6 +65,14 @@ def convert_urdf(urdf_path):
     return usd_path
 
 
+_shutdown_requested = False
+
+
+def _request_shutdown(signum, frame):
+    global _shutdown_requested
+    _shutdown_requested = True
+
+
 def main():
     given_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_STAGE_PATH
     given_path = os.path.abspath(given_path)
@@ -47,26 +81,52 @@ def main():
 
     simulation_app = SimulationApp({"headless": False})
 
-    import isaacsim.core.experimental.utils.app as app_utils
-    import omni.usd
+    # Must be installed after SimulationApp() is constructed: Kit registers
+    # its own SIGTERM handler as part of startup and a handler set
+    # beforehand gets overwritten by it.
+    signal.signal(signal.SIGTERM, _request_shutdown)
 
-    app_utils.enable_extension("isaacsim.ros2.bridge")
-    simulation_app.update()
+    try:
+        import isaacsim.core.experimental.utils.app as app_utils
+        import omni.ext
+        import omni.kit.app
+        import omni.usd
 
-    if not os.path.isfile(given_path):
-        print(f"{given_path} not found. Opening an empty stage instead.")
-    elif given_path.lower().endswith(".urdf"):
-        stage_path = convert_urdf(given_path)
-        omni.usd.get_context().open_stage(stage_path)
-    else:
-        print(f"Opening {given_path}")
-        omni.usd.get_context().open_stage(given_path)
-
-    while simulation_app.is_running():
+        app_utils.enable_extension("isaacsim.ros2.bridge")
         simulation_app.update()
 
-    simulation_app.close()
+        if os.path.isdir(OMNIVERSE_MCP_EXTENSION_PATH):
+            omni.kit.app.get_app().get_extension_manager().add_path(OMNIVERSE_MCP_EXTENSION_PATH)
+            simulation_app.update()
+            enabled = app_utils.enable_extension(OMNIVERSE_MCP_EXTENSION_NAME)
+            simulation_app.update()
+            print(f"Omniverse MCP Bridge: {'enabled' if enabled else 'FAILED to enable'}")
+        else:
+            print(f"Omniverse MCP Bridge not found at {OMNIVERSE_MCP_EXTENSION_PATH}, skipping")
+
+        if not os.path.isfile(given_path):
+            print(f"{given_path} not found. Opening an empty stage instead.")
+        elif given_path.lower().endswith(".urdf"):
+            stage_path = convert_urdf(given_path)
+            omni.usd.get_context().open_stage(stage_path)
+        else:
+            print(f"Opening {given_path}")
+            omni.usd.get_context().open_stage(given_path)
+
+        while simulation_app.is_running() and not _shutdown_requested:
+            simulation_app.update()
+    finally:
+        # Always runs: normal exit (is_running() went False), Ctrl+C
+        # (KeyboardInterrupt, Python's default SIGINT behavior), or SIGTERM
+        # (the flag above, checked once we're back in our own loop). This is
+        # the actual fix for Isaac Sim "not quitting properly" - without it,
+        # any interrupt skips this call and Kit's GPU/CUDA context never
+        # tears down cleanly.
+        simulation_app.close()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(130)

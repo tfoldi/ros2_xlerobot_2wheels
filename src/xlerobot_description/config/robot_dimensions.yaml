@@ -7,42 +7,58 @@ xlerobot:
   base:
     # --- odometry critical, do these first ---
     #
-    # Upstream lerobot config has 0.05. But the 0.4.0 build notes say 5 inch
-    # walker wheels, so 127 mm diameter, r = 0.0635. That is 27% off, and every
-    # distance the robot reports depends on it.
-    # TODO drive a measured 5 m line and fix this.
-    wheel_radius: 0.0635
+    # Measured directly off the drive wheel: 125mm outer diameter.
+    wheel_radius: 0.0625
 
     # Distance between the two wheel contact patches. diff_drive_controller calls
-    # it wheel_separation. Upstream calls it "wheelbase" and ships 0.25, but that
-    # is the wrong axis in car terms.
-    # TODO measure, then check by turning N times in place.
-    wheel_separation: 0.25
+    # it wheel_separation. Measured 550mm - wider than the cart body itself
+    # (405-459mm across upstream's own chassis collision boxes) and wider than
+    # upstream's own reference URDF track (0.45m, wheels at y=+-0.225): the
+    # custom drive-wheel axle bar extends past the basket on both sides, unlike
+    # the stock cart's wheels which sit roughly flush with the body edge.
+    wheel_separation: 0.55
 
     # UMBmark correction if the two wheels are not equal. 1.0 until measured.
     wheel_radius_scale_left: 1.0
     wheel_radius_scale_right: 1.0
 
-    wheel_width: 0.030          # TODO
+    wheel_width: 0.020          # measured
     wheel_mass: 0.15            # TODO
 
     # --- chassis ---
-    # IKEA RÅSKOG nominal size. TODO check against the real build with the
-    # printed parts on it.
+    # length/height still IKEA RASKOG nominal, TODO check against the real
+    # build. width corrected from upstream's own chassis collision boxes
+    # (0.405-0.459m depending which cross-section) - the old 0.350 guess was
+    # narrower than the actual cart.
     body_length: 0.450
-    body_width:  0.350
+    body_width:  0.405
     body_height: 0.780
 
-    # axle height above floor, same as wheel radius unless the mount is recessed
-    axle_height: 0.0635
+    # axle height above floor. Measured 62.5mm, same as wheel_radius - the
+    # mount is not recessed.
+    axle_height: 0.0625
 
     # axle offset from base_link, positive is forward. TODO
     axle_x_offset: 0.0
 
-    # Caster. No encoder on it, so it is a fixed sphere in the URDF.
-    caster_radius: 0.0375       # TODO
-    caster_x_offset: -0.180     # TODO, negative is behind the drive axle
-    caster_y_offset: 0.0
+    # Four generic casters (front left/right, rear left/right) - the stock
+    # cart's original four wheels are all still there, the drive wheels are
+    # an addition on their own axle bar, not a replacement for any of
+    # them. No encoder on any of them, so each is a fixed sphere in the URDF.
+    # Diameter measured 55mm.
+    caster_radius: 0.0275
+    # Checked against the real cart body mesh's footprint in Isaac Sim via
+    # get_prim_bounds, base_link frame: raskogbody spans x=-0.048 to
+    # x=0.345 (drive axle is x=0). Rear inset matches the earlier fix
+    # (sits just inside the rear edge); front mirrors that same inset off
+    # the front edge. Neither measured against the real robot's actual leg
+    # positions, just checked to not float in visibly empty space.
+    caster_rear_x_offset: -0.04
+    caster_front_x_offset: 0.31
+    # TODO measure. Estimated from the corrected body_width (0.405m), not
+    # measured directly - casters sit near the corners, inset a bit from
+    # the body edge. Same value used for front and rear pairs.
+    caster_y_offset: 0.15
 
     # Chassis only, no arms, no battery, no payload.
     # Don't copy the 70.1 kg from the upstream URDF, that is ManiSkill's loaded
@@ -54,7 +70,7 @@ xlerobot:
   # --- speed limits ---
   # From the servo ceiling. Upstream clamps at max_raw = 3000 ticks/s:
   #   3000 / (4096/360) = 263.7 deg/s = 4.60 rad/s
-  #   v_max = 4.60 * 0.0635 = 0.292 m/s
+  #   v_max = 4.60 * 0.0625 = 0.288 m/s
   # Keep Nav2 under these.
   limits:
     wheel_max_angular_velocity: 4.60   # rad/s, servo limit

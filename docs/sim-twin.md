@@ -78,13 +78,29 @@ With this hardware interface, the same `controller_manager`,
 hardware plugin differs from the physical-robot configuration.
 
 Selected by `use_sim:=true` in `xlerobot.urdf.xacro`, which loads
-`xlerobot.ros2_control_sim.xacro` — a single combined hardware component
-covering all joints, since simulation has no physical bus to split by
-(the real robot's two-bus split, described in ARCHITECTURE §1.1, does not
-apply here).
+`xlerobot.ros2_control_sim.xacro` — two hardware components, one per
+command-interface type (`xlerobot_sim_wheels` for the velocity-commanded
+wheels, `xlerobot_sim_position` for the position-commanded head/arms), not
+one combined component and not the real robot's bus split (ARCHITECTURE
+§1.1, which is about physical wiring and does not apply here).
 
-Topic names: `/isaac_joint_commands`, `/isaac_joint_states`. These must
-match on both the `ros2_control` xacro and the Isaac Sim Action Graph.
+The split exists because `joint_state_topic_hardware_interface`'s write()
+only appends to a `sensor_msgs/JointState` command message's
+position/velocity/effort arrays for the command interfaces a joint
+actually declares, while `name` always lists every joint in the component.
+A component mixing velocity- and position-commanded joints produces a
+message whose arrays are shorter than `name` and misaligned; Isaac Sim's
+`ROS2SubscribeJointState` correctly refuses that ("size of position,
+velocity and effort arrays must match the number of actuators") instead of
+guessing which value belongs to which joint. Keeping each component
+homogeneous keeps its arrays always either full-length or empty.
+
+Topic names: commands are split, `/isaac_wheel_commands` and
+`/isaac_position_commands`; state stays shared on `/isaac_joint_states`,
+since `JointStateTopicSystem::read()` looks up each incoming name against
+its own joints and silently skips ones it doesn't own, so one combined
+state message covering every joint is safe to share. These must match
+across the `ros2_control` xacro and the Isaac Sim Action Graph.
 
 `sum_wrapped_joint_states` is enabled, since Isaac Sim reports continuous
 joint position wrapped to a ±2π range. This is unrelated to the STS3215's
@@ -96,10 +112,20 @@ are handled independently.
 `sim/build_isaac_scene.py` imports the robot description and builds a ROS 2
 bridge Action Graph:
 
-- `ROS2SubscribeJointState` (`/isaac_joint_commands`) → `IsaacArticulationController`
-- `IsaacArticulationController` → drives the articulation
-- `ROS2PublishJointState` (`/isaac_joint_states`) ← articulation state
+- `ROS2SubscribeJointState` (`/isaac_wheel_commands`) → its own `IsaacArticulationController` (wheels)
+- `ROS2SubscribeJointState` (`/isaac_position_commands`) → its own `IsaacArticulationController` (head/arms)
+- Both `IsaacArticulationController` instances drive the same articulation, on disjoint joint sets
+- `ROS2PublishJointState` (`/isaac_joint_states`) ← articulation state, shared across both
 - `ROS2PublishClock` (`/clock`)
+
+Each joint's PhysX drive gets an explicit stiffness/damping/max_force set
+by `configure_joint_drives()` after import: the URDF importer creates a
+drive with zero gain for any joint whose source URDF has no
+`<dynamics damping="..."/>`, and a zero-gain drive applies no corrective
+torque at all regardless of the commanded position or velocity — a command
+can reach `/isaac_wheel_commands` with the exact right value and the wheel
+still won't turn. The gain values are picked to make closed-loop control
+visibly work, not tuned against the real servo's torque curve.
 
 The articulation controller and joint-state publisher target
 `/World/xlerobot/Geometry/base_footprint/base_link`, where the URDF
@@ -123,9 +149,10 @@ authoritative.
 | Path | Purpose |
 |---|---|
 | `sim/xlerobot_import.urdf` | Generated. Plain URDF for the Isaac Sim importer, rendered from the xacro with `use_ros2_control:=false` and `with_arms:=false`. Gitignored. |
-| `sim/build_isaac_scene.py` | Imports the URDF, builds the ROS 2 bridge graph, saves the stage. |
+| `sim/build_isaac_scene.py` | Imports the URDF, sets joint drive gains, builds the ROS 2 bridge graph, saves the stage. `--test-frames N` presses Play and steps N frames first, to catch graph errors before saving. `--screenshot PATH` captures a viewport image after building, for checking mesh placement without opening the GUI. |
 | `sim/output/` | Generated. `xlerobot_twin.usd` is the scene to open in Isaac Sim. Gitignored. |
-| `sim/launch_gui.py` | Opens a given USD stage in the interactive Isaac Sim GUI (not headless). Defaults to `sim/output/xlerobot_twin.usd`. |
+| `sim/launch_gui.py` | Opens a given USD stage in the interactive Isaac Sim GUI (not headless), waits for a human to press Play. Defaults to `sim/output/xlerobot_twin.usd`. |
+| `sim/run_headless.py` | The headless equivalent: opens the stage, presses Play itself, and stays running so a `ros2_control` bringup elsewhere can drive it. No display needed - the form meant for CI or the Jetson. |
 
 Regenerate the import URDF after xacro changes:
 
@@ -160,36 +187,61 @@ python sim/launch_gui.py [path/to/stage.usd]
 Requires a display. Opens the given stage, or `sim/output/xlerobot_twin.usd`
 by default, and stays open until the window is closed.
 
-The current scene uses placeholder box/cylinder visual geometry, not the
-robot's real meshes — `base_2wheels.xacro` and `head_pantilt.xacro` do not
-yet reference the mesh files bundled with upstream XLeRobot
-(`simulation/Isaac_sim/xlerobot.zip` in the XLeRobot repo). For a visual
-reference of the physical robot's actual appearance, that bundle's own
-`xlerobot/xlerobot/xlerobot.usd` can be opened with the same script; note
-that it is upstream's 0.3.0 three-wheel model (virtual planar base joint,
-no real wheel links) and is not wired to the ROS 2 bridge graph described
-above.
+`base_2wheels.xacro`'s `base_link` visual uses `raskogbody.stl`, from
+upstream's own Isaac Sim asset bundle (`simulation/Isaac_sim/xlerobot.zip`
+in the XLeRobot repo, Apache-2.0) — the same IKEA RÅSKOG cart this robot is
+built on. Its placement offset is derived from upstream's own reference
+URDF numbers (see the comment above that visual block in the xacro for the
+derivation), not measured against this specific robot, so it should be
+visually checked against the real proportions rather than trusted outright.
+Deliberately excludes upstream's `raskogwheel1/2.stl` sub-meshes: those
+depict the stock cart's original four casters at their stock 0.45m track,
+narrower than this robot's actual 0.55m custom drive-wheel track, and would
+draw a second, wrong-width pair of wheels overlapping the real ones. The
+drive wheels and caster are still primitive geometry (cylinder/sphere),
+sized to the real measured dimensions in `robot_dimensions.yaml` but not
+using a mesh — `hardware/ongoing_upgrades/035wheel.stl` in the XLeRobot
+repo is the closest candidate and has not been wired in; unlike the body
+mesh it has no existing reference transform to derive a placement from.
+
+## Running headless
+
+```bash
+source ~/venvs/isaacsim/bin/activate
+python sim/run_headless.py [path/to/stage.usd]
+```
+
+No display needed. Opens the stage, presses Play, and stays running so a
+`ros2_control` bringup (`use_sim:=true`) elsewhere has something live to
+talk to. Stop with Ctrl+C or plain `kill <pid>`, not `-9` — see
+`launch_gui.py`'s docstring for why a flag checked in the main loop is used
+for shutdown instead of a signal handler that raises.
+
+Suspending the machine mid-session (lid close, idle timeout) risks a hard
+hang requiring a manual power-cycle: this driver's `nvidia_uvm` kernel
+module has a NULL-pointer bug in its GPU-unregister path
+(`uvm_hmm_unregister_gpu`) that a CUDA process exiting can trigger — clean
+exits included, not just kills — leaving the kernel tainted
+("Fixing recursive fault but reboot is needed!"). Suspending on top of
+that tainted state is what turns a recoverable oops into an unrecoverable
+one. `tools/isaac_sim_sleep_guard.sh disable` masks the systemd sleep
+targets for the duration of a session; `... enable` restores them
+afterward.
 
 ## Known limitations
 
-- No joint stiffness/damping is specified in the xacro (`base_2wheels.xacro`,
-  `head_pantilt.xacro`), so the URDF importer creates PhysX actuators with
-  no PD gain parameters. This may produce unrealistic joint response under
-  velocity or position commands. Fix by adding `<dynamics>` to the
-  affected joints, or by setting `override_joint_stiffness` /
-  `override_joint_damping` in `URDFImporterConfig`.
+- Joint drive gains (`configure_joint_drives()` in `build_isaac_scene.py`)
+  are picked to make closed-loop control visibly work, not tuned against
+  the real servo's torque curve. Revisit once that matters.
 - `ROS2PublishJointState.inputs:targetPrim` is a deprecated input on
   current Isaac Sim releases in favor of a separate `IsaacReadJointState`
   node. It remains functional; migrating is not required but is preferred
   for new work on this graph.
-- The scene has not been validated with the simulation running
-  continuously against live ROS 2 topics (only a bounded number of
-  simulation steps, to confirm the Action Graph evaluates without error).
-  Confirming topic content — not just that the graph builds — needs a
-  running session with `ros2 topic echo` against `/isaac_joint_states`
-  and a command published to `/isaac_joint_commands`.
-- `joint_state_topic_hardware_interface` builds against this workspace
-  independently of the Isaac Sim side; the two have not been run together.
+- The drive wheels and caster are still primitive geometry, not a mesh —
+  see the note above `## Running headless`. `base_link`'s cart body mesh
+  placement is derived from upstream's reference numbers, not measured
+  against this specific robot.
+- Arms are not in the scene yet (phase 3 hasn't started); only base + head.
 
 ## Omniverse MCP (optional)
 
@@ -213,10 +265,12 @@ Setup:
 
 ## TODO
 
-- Validate topic content with the simulation running continuously.
-- Address the joint stiffness/damping gap.
-- Reference the real meshes from upstream's Isaac Sim bundle in
-  `base_2wheels.xacro` and `head_pantilt.xacro` in place of the current
-  placeholder geometry.
+- Wire a real mesh for the drive wheels (`hardware/ongoing_upgrades/035wheel.stl`
+  in the XLeRobot repo is the closest candidate) and the caster.
+- Verify `base_link`'s cart body mesh placement against the real robot,
+  not just upstream's reference numbers.
+- Tune joint drive gains against the real servo's torque curve.
+- Reference real meshes for the head (`head_pantilt.xacro` is still
+  placeholder geometry).
 - Extend the scene to include the arms once phase 3 starts.
 - Migrate off the deprecated `ROS2PublishJointState.inputs:targetPrim`.

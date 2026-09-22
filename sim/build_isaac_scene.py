@@ -38,8 +38,11 @@ ROBOT_PRIM_PATH = "/World/xlerobot"
 ARTICULATION_ROOT_PATH = ROBOT_PRIM_PATH + "/Geometry/base_footprint/base_link"
 
 # Matches xlerobot.ros2_control_sim.xacro's joint_state_topic_hardware_interface
-# params exactly. If those change, change these too.
-JOINT_COMMANDS_TOPIC = "/isaac_joint_commands"
+# params exactly. If those change, change these too. Commands are split by
+# interface type (see that xacro's comment for why); states stay on one
+# shared topic since the read side tolerates joint names it doesn't own.
+WHEEL_COMMANDS_TOPIC = "/isaac_wheel_commands"
+POSITION_COMMANDS_TOPIC = "/isaac_position_commands"
 JOINT_STATES_TOPIC = "/isaac_joint_states"
 
 # Wheels are velocity-driven (diff_drive_controller), head is position-driven
@@ -59,6 +62,16 @@ def import_urdf():
         collision_from_visuals=True,
         fix_base=False,  # mobile base, must NOT be fixed to the world
         joint_drive_type="force",
+        # xlerobot.urdf.xacro emits package://xlerobot_description/... mesh
+        # URIs (needed for RViz/robot_state_publisher on the real bringup).
+        # The importer's own package:// auto-discovery climbs up from the
+        # URDF's directory looking for a bare "meshes/" folder, which never
+        # matches our src/xlerobot_description layout - this mapping is the
+        # documented, explicit way around that instead of relying on it.
+        ros_package_paths=[{
+            "name": "xlerobot_description",
+            "path": os.path.join(REPO_ROOT, "src", "xlerobot_description"),
+        }],
         # Matches each joint's real operating mode. Everything not matched
         # by these two patterns (nothing else exists in the base+head-only
         # import) keeps whatever the importer defaults to.
@@ -125,6 +138,60 @@ def add_robot_to_stage(imported_usd_path):
               "the ArticulationController node will not find anything to drive")
 
 
+# stiffness, damping, max_force. The URDF importer creates each joint's
+# PhysX drive with zero gain whenever the source URDF has no <dynamics
+# damping=".../> - it says so directly ("actuator will be created without
+# gain parameters"). A drive with zero gain applies zero corrective torque,
+# so a commanded position/velocity has no physical effect no matter what
+# ros2_control sends - confirmed by watching /isaac_wheel_commands carry
+# the right numbers while the wheels barely moved and drifted unevenly.
+# Velocity-driven wheels only need damping (the term that converts a
+# velocity error into torque); position-driven joints need both. These
+# values are picked to make closed-loop control visibly work, not tuned
+# against the real servo's torque curve - revisit once that matters.
+JOINT_DRIVE_GAINS = {
+    "left_wheel_joint": (0.0, 1e5, 1e4),
+    "right_wheel_joint": (0.0, 1e5, 1e4),
+    "head_pan_joint": (1e4, 1e3, 1e3),
+    "head_tilt_joint": (1e4, 1e3, 1e3),
+}
+
+
+def configure_joint_drives():
+    import omni.usd
+    from pxr import UsdPhysics
+
+    stage = omni.usd.get_context().get_stage()
+    for joint_name, (stiffness, damping, max_force) in JOINT_DRIVE_GAINS.items():
+        joint_path = f"{ROBOT_PRIM_PATH}/Physics/{joint_name}"
+        prim = stage.GetPrimAtPath(joint_path)
+        if not prim.IsValid():
+            print(f"WARNING: joint prim not found at {joint_path}, drive gain not set")
+            continue
+        drive = UsdPhysics.DriveAPI.Apply(prim, "angular")
+        drive.CreateStiffnessAttr(stiffness)
+        drive.CreateDampingAttr(damping)
+        drive.CreateMaxForceAttr(max_force)
+    print("Joint drive gains set (replacing the importer's zero-gain defaults)")
+
+
+def capture_screenshot(path):
+    """One-off diagnostic capture, not part of the normal build - lets a
+    mesh/offset change (like base_link's raskogbody.stl placement) be
+    checked by actually looking at it instead of trusting the arithmetic
+    that produced it."""
+    import omni.kit.viewport.utility as vp_util
+    from isaacsim.core.rendering_manager import ViewportManager
+
+    ViewportManager.set_camera_view(
+        camera="/OmniverseKit_Persp",
+        eye=[0.9, -0.9, 0.6],
+        target=[0.0, 0.0, 0.3],
+    )
+    viewport = vp_util.get_active_viewport()
+    return vp_util.capture_viewport_to_file(viewport, path)
+
+
 def build_ros2_bridge_graph():
     import omni.graph.core as og
 
@@ -137,21 +204,38 @@ def build_ros2_bridge_graph():
     # from joint states. Its input attribute names also differ from the
     # inputs:chassisPrim used by older reference material - check the
     # node's schema in-process before adding it back.
+    #
+    # Two separate Subscribe/ArticulationController pairs, one per command
+    # interface type, not one shared pair: joint_state_topic_hardware_interface's
+    # write() only fills position/velocity/effort for the command interfaces
+    # a joint actually declares, so a single combined topic covering both
+    # velocity-commanded wheels and position-commanded head/arm joints comes
+    # out with name/position/velocity arrays of different lengths.
+    # ROS2SubscribeJointState correctly rejects that ("size of position,
+    # velocity and effort arrays match the number of actuators") instead of
+    # guessing which value belongs to which joint. Splitting by interface
+    # type keeps each topic's arrays internally consistent. Both
+    # ArticulationController instances target the same articulation and
+    # drive disjoint joint sets, so they don't fight each other.
     nodes = [
         ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
         ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
         ("PublishClock", "isaacsim.ros2.bridge.ROS2PublishClock"),
-        ("SubscribeJointState", "isaacsim.ros2.bridge.ROS2SubscribeJointState"),
-        ("ArticulationController", "isaacsim.core.nodes.IsaacArticulationController"),
+        ("SubscribeWheelCommand", "isaacsim.ros2.bridge.ROS2SubscribeJointState"),
+        ("ArticulationControllerWheels", "isaacsim.core.nodes.IsaacArticulationController"),
+        ("SubscribePositionCommand", "isaacsim.ros2.bridge.ROS2SubscribeJointState"),
+        ("ArticulationControllerPosition", "isaacsim.core.nodes.IsaacArticulationController"),
         ("PublishJointState", "isaacsim.ros2.bridge.ROS2PublishJointState"),
     ]
 
     values = [
         ("PublishClock.inputs:topicName", "/clock"),
-        ("SubscribeJointState.inputs:topicName", JOINT_COMMANDS_TOPIC),
-        # Both of these need the real articulation root, not the wrapper
-        # prim - see ARTICULATION_ROOT_PATH's own comment.
-        ("ArticulationController.inputs:targetPrim", ARTICULATION_ROOT_PATH),
+        ("SubscribeWheelCommand.inputs:topicName", WHEEL_COMMANDS_TOPIC),
+        ("SubscribePositionCommand.inputs:topicName", POSITION_COMMANDS_TOPIC),
+        # All three need the real articulation root, not the wrapper prim -
+        # see ARTICULATION_ROOT_PATH's own comment.
+        ("ArticulationControllerWheels.inputs:targetPrim", ARTICULATION_ROOT_PATH),
+        ("ArticulationControllerPosition.inputs:targetPrim", ARTICULATION_ROOT_PATH),
         ("PublishJointState.inputs:topicName", JOINT_STATES_TOPIC),
         ("PublishJointState.inputs:targetPrim", ARTICULATION_ROOT_PATH),
     ]
@@ -159,12 +243,23 @@ def build_ros2_bridge_graph():
     connections = [
         ("OnPlaybackTick.outputs:tick", "PublishClock.inputs:execIn"),
         ("ReadSimTime.outputs:simulationTime", "PublishClock.inputs:timeStamp"),
-        ("OnPlaybackTick.outputs:tick", "SubscribeJointState.inputs:execIn"),
-        ("OnPlaybackTick.outputs:tick", "ArticulationController.inputs:execIn"),
-        ("SubscribeJointState.outputs:jointNames", "ArticulationController.inputs:jointNames"),
-        ("SubscribeJointState.outputs:positionCommand", "ArticulationController.inputs:positionCommand"),
-        ("SubscribeJointState.outputs:velocityCommand", "ArticulationController.inputs:velocityCommand"),
+        ("OnPlaybackTick.outputs:tick", "SubscribeWheelCommand.inputs:execIn"),
+        ("OnPlaybackTick.outputs:tick", "ArticulationControllerWheels.inputs:execIn"),
+        ("SubscribeWheelCommand.outputs:jointNames", "ArticulationControllerWheels.inputs:jointNames"),
+        ("SubscribeWheelCommand.outputs:positionCommand", "ArticulationControllerWheels.inputs:positionCommand"),
+        ("SubscribeWheelCommand.outputs:velocityCommand", "ArticulationControllerWheels.inputs:velocityCommand"),
+        ("OnPlaybackTick.outputs:tick", "SubscribePositionCommand.inputs:execIn"),
+        ("OnPlaybackTick.outputs:tick", "ArticulationControllerPosition.inputs:execIn"),
+        ("SubscribePositionCommand.outputs:jointNames", "ArticulationControllerPosition.inputs:jointNames"),
+        ("SubscribePositionCommand.outputs:positionCommand", "ArticulationControllerPosition.inputs:positionCommand"),
+        ("SubscribePositionCommand.outputs:velocityCommand", "ArticulationControllerPosition.inputs:velocityCommand"),
         ("OnPlaybackTick.outputs:tick", "PublishJointState.inputs:execIn"),
+        # Without this, timeStamp defaults to 0.0 and every published message
+        # trips Isaac's "Frame Timestamp is invalid" warning on every tick -
+        # noisy but not otherwise harmful, since the payload itself still
+        # goes out with real data. PublishClock needs the same wiring, done
+        # above; this one was missing it.
+        ("ReadSimTime.outputs:simulationTime", "PublishJointState.inputs:timeStamp"),
     ]
 
     og.Controller.edit(
@@ -172,7 +267,7 @@ def build_ros2_bridge_graph():
         {keys.CREATE_NODES: nodes, keys.SET_VALUES: values, keys.CONNECT: connections},
     )
     print(f"ROS 2 bridge graph created at {graph_path}")
-    print(f"  subscribes {JOINT_COMMANDS_TOPIC} -> drives the articulation")
+    print(f"  subscribes {WHEEL_COMMANDS_TOPIC} + {POSITION_COMMANDS_TOPIC} -> drives the articulation")
     print(f"  publishes  {JOINT_STATES_TOPIC} <- articulation joint state")
 
 
@@ -182,6 +277,9 @@ def main():
     parser.add_argument("--test-frames", type=int, default=0,
                          help="If > 0, press Play and step this many frames before saving, "
                               "to verify the graph actually evaluates without erroring.")
+    parser.add_argument("--screenshot", type=str, default=None,
+                         help="Path to save a viewport screenshot to after building, "
+                              "for visually checking mesh placement.")
     args = parser.parse_args()
 
     if not os.path.isfile(URDF_PATH):
@@ -192,43 +290,59 @@ def main():
 
     simulation_app = SimulationApp({"headless": args.headless})
 
-    import isaacsim.core.experimental.utils.app as app_utils
-    import omni.usd
+    try:
+        import isaacsim.core.experimental.utils.app as app_utils
+        import omni.usd
 
-    omni.usd.get_context().new_stage()
-    simulation_app.update()
-
-    app_utils.enable_extension("isaacsim.ros2.bridge")
-    simulation_app.update()
-
-    imported_usd_path = import_urdf()
-    simulation_app.update()
-
-    add_robot_to_stage(imported_usd_path)
-    simulation_app.update()
-
-    build_ros2_bridge_graph()
-    simulation_app.update()
-
-    if args.test_frames > 0:
-        from isaacsim.core.simulation_manager import SimulationManager
-
-        SimulationManager.setup_simulation(dt=1.0 / 60.0, device="cpu")
+        omni.usd.get_context().new_stage()
         simulation_app.update()
-        app_utils.play()
-        print(f"Play pressed, stepping {args.test_frames} frames to verify the graph evaluates...")
-        for i in range(args.test_frames):
+
+        app_utils.enable_extension("isaacsim.ros2.bridge")
+        simulation_app.update()
+
+        imported_usd_path = import_urdf()
+        simulation_app.update()
+
+        add_robot_to_stage(imported_usd_path)
+        simulation_app.update()
+
+        configure_joint_drives()
+        simulation_app.update()
+
+        build_ros2_bridge_graph()
+        simulation_app.update()
+
+        if args.test_frames > 0:
+            from isaacsim.core.simulation_manager import SimulationManager
+
+            SimulationManager.setup_simulation(dt=1.0 / 60.0, device="cpu")
             simulation_app.update()
-        app_utils.stop()
-        print("Stepped without a hard crash. Does not mean the topics look right on the ROS side,"
-              " check that separately once the graph is confirmed built.")
+            app_utils.play()
+            print(f"Play pressed, stepping {args.test_frames} frames to verify the graph evaluates...")
+            for i in range(args.test_frames):
+                simulation_app.update()
+            app_utils.stop()
+            print("Stepped without a hard crash. Does not mean the topics look right on the ROS side,"
+                  " check that separately once the graph is confirmed built.")
 
-    os.makedirs(USD_OUTPUT_DIR, exist_ok=True)
-    omni.usd.get_context().save_as_stage(STAGE_PATH)
-    print(f"Stage saved: {STAGE_PATH}")
+        if args.screenshot:
+            capture_screenshot(args.screenshot)
+            for _ in range(30):
+                simulation_app.update()
+            print(f"Screenshot saved: {args.screenshot}")
 
-    simulation_app.close()
+        os.makedirs(USD_OUTPUT_DIR, exist_ok=True)
+        omni.usd.get_context().save_as_stage(STAGE_PATH)
+        print(f"Stage saved: {STAGE_PATH}")
+    finally:
+        # Always runs, including on Ctrl+C mid-import: an interrupted run
+        # otherwise skips this and Kit's GPU/CUDA context never tears down
+        # cleanly, same issue launch_gui.py had.
+        simulation_app.close()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(130)
