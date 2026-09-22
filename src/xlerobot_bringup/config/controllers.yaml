@@ -40,8 +40,19 @@ diff_drive_controller:
 
     # diff_drive_controller doubles wheel_separation internally by design,
     # this multiplier corrects for track width vs the encoder-derived value.
-    # 1.0 until UMBmark calibration says otherwise.
-    wheel_separation_multiplier: 1.0
+    #
+    # Rough placeholder, not a calibrated number: commanded a 180 degree
+    # in-place turn via /odom (stops once the controller's own odometry
+    # says 180, see ARCHITECTURE.md section 4.1/6), actual measured rotation
+    # was eyeballed at ~190-195 degrees. Since the controller uses
+    # wheel_separation symmetrically for both generating the wheel commands
+    # and reading odometry back, that test can't validate the configured
+    # 0.55m against reality directly - it reveals the mismatch through how
+    # much MORE the cart actually turned than it told itself it turned.
+    # actual/commanded ~1.06-1.08 implies a real effective track width closer
+    # to ~0.51-0.52m, hence ~0.94 here. Revisit with UMBmark (ARCHITECTURE.md
+    # section 6) for a real number - a single eyeballed-angle trial is not that.
+    wheel_separation_multiplier: 0.94
     left_wheel_radius_multiplier: 1.0
 
     # The right motor is mounted mirrored (confirmed on the real cart by
