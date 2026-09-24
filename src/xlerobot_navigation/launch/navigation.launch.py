@@ -40,6 +40,16 @@ def generate_launch_description():
             package="rviz2", executable="rviz2",
             arguments=["-d", rviz_config],
             condition=IfCondition(rviz),
+            # Ogre's GLX renderer segfaults under native Wayland. Forcing xcb inherits this
+            # session's QT_AUTO_SCREEN_SCALE_FACTOR=1 (set for native Wayland apps), which
+            # against XWayland's own DPI reporting doubles up into huge UI text and a
+            # mouse/viewport coordinate mismatch (the 3D view jitters when orbiting).
+            additional_env={
+                "QT_QPA_PLATFORM": "xcb",
+                "QT_AUTO_SCREEN_SCALE_FACTOR": "0",
+                "QT_SCALE_FACTOR": "1",
+                "QT_ENABLE_HIGHDPI_SCALING": "0",
+            },
         ),
         Node(
             package="tf2_ros",
