@@ -4,19 +4,27 @@ identity transform since there's no localization source; real SLAM replaces this
 VLP-16 is up (ARCHITECTURE §5).
 
 Run xlerobot_bringup's bringup.launch.py first - this assumes diff_drive_controller/odom is
-already publishing.
+already publishing. rviz:=true opens RViz with Nav2's default view, "2D Nav Goal" sends a
+navigate_to_pose goal.
 """
 
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import LifecycleNode, Node
 
 
 def generate_launch_description():
     nav_share = get_package_share_directory("xlerobot_navigation")
     params_file = os.path.join(nav_share, "config", "nav2_params.yaml")
+    rviz_config = os.path.join(
+        get_package_share_directory("nav2_bringup"), "rviz", "nav2_default_view.rviz")
+
+    rviz = LaunchConfiguration("rviz")
 
     lifecycle_nodes = [
         "controller_server",
@@ -27,6 +35,12 @@ def generate_launch_description():
     ]
 
     return LaunchDescription([
+        DeclareLaunchArgument("rviz", default_value="false"),
+        Node(
+            package="rviz2", executable="rviz2",
+            arguments=["-d", rviz_config],
+            condition=IfCondition(rviz),
+        ),
         Node(
             package="tf2_ros",
             executable="static_transform_publisher",
