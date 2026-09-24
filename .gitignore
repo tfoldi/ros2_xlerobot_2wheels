@@ -20,3 +20,6 @@ __pycache__/
 # see docs/sim-twin.md). Not source, don't commit either.
 /sim/xlerobot_import.urdf
 /sim/output/
+
+# rosbag recordings, bringup.launch.py record:=true
+/bags/

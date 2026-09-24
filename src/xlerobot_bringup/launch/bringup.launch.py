@@ -15,14 +15,19 @@ watchdog when nothing needs it. The watchdog engages e_stop until this
 bringup's own joint_state_broadcaster is actually publishing, so there's
 no real ordering issue bringing both up together this way, unlike running
 teleop.launch.py standalone before bringup is up.
+
+record:=true records every topic to bags/<timestamp> (gitignored) for
+offline debugging. foxglove:=true starts foxglove_bridge on the default
+port 8765 for live inspection from Foxglove Studio. Both off by default.
 """
 
+import datetime
 import glob
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration
@@ -104,6 +109,12 @@ def generate_launch_description():
     use_sim = LaunchConfiguration("use_sim")
     teleop = LaunchConfiguration("teleop")
     with_head = LaunchConfiguration("with_head")
+    record = LaunchConfiguration("record")
+    foxglove = LaunchConfiguration("foxglove")
+
+    # Relative to wherever `ros2 launch` is run from - this repo's own convention (see
+    # tools/*.py) is always the repo root, where bags/ is gitignored.
+    bag_path = os.path.join("bags", datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
 
     robot_description = ParameterValue(
         Command([
@@ -128,6 +139,8 @@ def generate_launch_description():
         # off by default: bus1 (head pan/tilt) isn't wired on a base-only
         # robot, see xlerobot.urdf.xacro. Flip on once the head is plugged in.
         DeclareLaunchArgument("with_head", default_value="false"),
+        DeclareLaunchArgument("record", default_value="false"),
+        DeclareLaunchArgument("foxglove", default_value="false"),
 
         # Must run before the Node actions below: OpaqueFunction is resolved
         # synchronously at this point in the list, so a raised error here
@@ -160,5 +173,15 @@ def generate_launch_description():
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(teleop_launch_file),
             condition=IfCondition(teleop),
+        ),
+
+        ExecuteProcess(
+            cmd=["ros2", "bag", "record", "-a", "-o", bag_path],
+            condition=IfCondition(record),
+            output="screen",
+        ),
+        Node(
+            package="foxglove_bridge", executable="foxglove_bridge",
+            condition=IfCondition(foxglove),
         ),
     ])
