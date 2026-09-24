@@ -60,6 +60,7 @@ def generate_launch_description():
             package="nav2_controller", executable="controller_server",
             name="controller_server", namespace="",
             parameters=[params_file],
+            remappings=[("cmd_vel", "cmd_vel_nav")],
         ),
         LifecycleNode(
             package="nav2_planner", executable="planner_server",
@@ -70,6 +71,7 @@ def generate_launch_description():
             package="nav2_behaviors", executable="behavior_server",
             name="behavior_server", namespace="",
             parameters=[params_file],
+            remappings=[("cmd_vel", "cmd_vel_nav")],
         ),
         LifecycleNode(
             package="nav2_bt_navigator", executable="bt_navigator",
@@ -80,6 +82,10 @@ def generate_launch_description():
             package="nav2_velocity_smoother", executable="velocity_smoother",
             name="velocity_smoother", namespace="",
             parameters=[params_file],
+            remappings=[
+                ("cmd_vel", "cmd_vel_nav"),
+                ("cmd_vel_smoothed", "/diff_drive_controller/cmd_vel"),
+            ],
         ),
         Node(
             package="nav2_lifecycle_manager", executable="lifecycle_manager",
