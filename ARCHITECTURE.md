@@ -412,12 +412,26 @@ Three numbers decide whether anything downstream means anything. All of them are
 
 | What | How | Where |
 |------|-----|-------|
-| `wheel_radius` | Drive a measured straight line, 5 m or more, compare reported to tape measured, scale. Repeat on the real floor surface. | `robot_dimensions.yaml` |
-| `wheel_separation` | Rotate in place N full turns, compare reported yaw to actual, scale. Or UMBmark. | `robot_dimensions.yaml` |
-| per-wheel scale | UMBmark square path, corrects unequal effective radii | `robot_dimensions.yaml` |
+| `wheel_radius` | Drive a measured straight line, compare reported to tape measured, scale. Repeat on the real floor surface, longer runs first (§1.4 - a 1 m check has more relative measurement error to hide behind). | `controllers.yaml` |
+| `wheel_separation_multiplier` | Rotate in place N full turns, compare reported yaw to actual, scale. Or UMBmark for a tighter number. | `controllers.yaml` |
+| per-wheel scale | UMBmark square path, corrects unequal effective radii | `controllers.yaml` |
 
-`tools/calibrate_wheel_odometry.py` runs the drive and compare loop and writes the YAML. Do
-it **before** tuning Nav2, otherwise the Nav2 gains are just compensating a scale error.
+Do this **before** tuning Nav2, otherwise the Nav2 gains are just compensating a scale error.
+
+`tools/calibrate_wheel_odometry.py` drives the motion itself and does the arithmetic - it
+doesn't edit the YAML, so apply the number it prints by hand and relaunch bringup (these are
+read once at controller activation, a live `ros2 param set` doesn't take effect):
+
+```
+python3 tools/calibrate_wheel_odometry.py straight-line --distance 1.0
+python3 tools/calibrate_wheel_odometry.py rotate-in-place --turns 0.5
+```
+
+Run with bringup already up, a clear straight-line path or room to spin in place, and a tape
+measure or protractor. It stops automatically once `/diff_drive_controller/odom` reports the
+commanded target, then prompts for the actual measurement and prints the corrected value to
+apply, using the current value from `controllers.yaml` as the baseline each time - so it's
+safe to run again after applying a suggestion, to converge over a couple of iterations.
 
 ---
 
