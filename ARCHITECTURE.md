@@ -255,8 +255,10 @@ Nothing out there covers these, and they are the actual work:
 `Present_Position` as 12 bit, 0 to 4095, and it wraps. In velocity mode the wheel turns
 continuously, so it wraps about every 0.39 m at r = 0.0625 (measured, see §1.4).
 
-Fixed locally in the vendored copy (`src/sts_hardware_interface`, not upstream - it's
-in-tree here, not a submodule): `read()` unwraps `MODE_VELOCITY` joints by accumulating the
+Fixed in the `tfoldi/sts_hardware_interface` fork, which `xlerobot.repos` pulls into
+`src/sts_hardware_interface` (upstream PR: adityakamath/sts_hardware_interface#21). Building
+against plain upstream `main` brings the wrap back: every wheel revolution shows up as a
+~-7 rad/s spike in odometry yaw rate. `read()` unwraps `MODE_VELOCITY` joints by accumulating the
 wrap-safe delta between consecutive single-turn readings (if the raw angle jumps by more
 than π between cycles, treat it as a wrap and fold it back into [-π, π] before adding it to
 a running total) instead of reporting the raw 2π-periodic angle directly.
@@ -362,11 +364,13 @@ should:
 - clamp commanded acceleration to what the CoM tolerates.
 
 **Don't build any of this around `sts_hardware_interface`'s own `/emergency_stop` service.**
-Each bus instance opens its own internal node hardcoded to the name
-`sts_hardware_interface_node` (not configurable), and each advertises `/emergency_stop` on
-that same absolute name. Two servers under one service name means a call only reaches one of
-them, not both, so it looks like a global e-stop and isn't one. With two buses that's a
-stop-half-the-robot bug, not a cosmetic one.
+Upstream `main` opens one internal node per bus instance with the hardcoded name
+`sts_hardware_interface_node`, and each advertises `/emergency_stop` on that same absolute
+name. Two servers under one service name means a call only reaches one of them, not both, so
+it looks like a global e-stop and isn't one. The fork suffixes node and service names with
+the component's `<ros2_control name>` (upstream PR #22, not yet tested with two buses on
+hardware), but each instance's e-stop still only stops its own bus, so it is still not a
+global e-stop. With two buses that's a stop-half-the-robot bug, not a cosmetic one.
 
 Use `controller_manager`'s own `switch_controller` to deactivate everything instead, or just
 rely on `cmd_vel_timeout` plus zero-command on watchdog trip, both of which act uniformly
@@ -440,7 +444,7 @@ safe to run again after applying a suggestion, to converge over a couple of iter
 | # | Risk | Impact | What to do |
 |---|------|--------|------------|
 | R1 | ~~`sts_hardware_interface` doesn't unwrap multi-turn wheel position~~ Fixed locally, confirmed on hardware (§4.1) | No unwrap gate against corrupted-but-valid reads yet | Add a max-plausible-delta check, see §4.1 "Still open". |
-| R2 | Both hardware instances share a hardcoded internal node name and collide on `/emergency_stop` | One instance's e-stop doesn't reach the other bus | Don't build the safety supervisor around this service; use `controller_manager`'s `switch_controller` instead, see §4.4. |
+| R2 | Upstream: both hardware instances share a hardcoded internal node name and collide on `/emergency_stop`. Fork: per-instance names, but each e-stop covers its own bus only | One instance's e-stop doesn't reach the other bus | Don't build the safety supervisor around this service; use `controller_manager`'s `switch_controller` instead, see §4.4. |
 | R3 | Bus 2 contention, arms starve wheel updates | Odometry jitter while manipulating | Instrument from day one. Split controller managers by rate. |
 | R4 | ~~`wheel_radius` really is 0.0635 not 0.05~~ Measured (0.0625) and spot-checked at 1 m (§1.4) | Only the full 5 m+ calibration run from §6 is still outstanding | Run the §6 procedure before trusting odometry past a few meters. |
 | R5 | Gemini unusable for cuVSLAM (§5) | No Isaac VSLAM without buying | VLP-16 + slam_toolbox is enough for navigation. Isaac is an upgrade, not a dependency. |

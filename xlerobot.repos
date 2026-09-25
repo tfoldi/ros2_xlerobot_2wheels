@@ -7,11 +7,14 @@
 repositories:
   sts_hardware_interface:
     type: git
-    url: https://github.com/adityakamath/sts_hardware_interface.git
+    url: https://github.com/tfoldi/sts_hardware_interface.git
     version: main
     # ros2_control interface for the Feetech bus. The critical dependency,
-    # see ADR-0001. CI tested on Jazzy/Kilted, unverified here: multi-bus
-    # instantiation and multi-turn wheel position (ARCHITECTURE §7 R1/R2).
+    # see ADR-0001. Canonical source is the tfoldi fork's main, which carries
+    # fixes this stack needs (multi-turn wheel position unwrap, per-instance
+    # service names, SyncRead buffer init). Each one is also sent upstream to
+    # adityakamath/sts_hardware_interface as its own PR; fork main is kept
+    # merged with upstream main.
 
   so_arm_ros2:
     type: git
