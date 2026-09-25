@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Streams cmd_vel/odom/wheel data and the robot model into Rerun for timeline
-debugging, opens the Rerun Viewer. Complements RViz/Foxglove rather than
-replacing them: scrub scalar time series (commanded vs actual velocity) next
-to the robot moving in the odom frame.
+"""Streams the robot, its odometry, velocities, Nav2 goal and plan, and camera
+video into Rerun for timeline debugging. Complements RViz/Foxglove rather than
+replacing them: scrub commanded vs actual velocity next to the robot moving in
+the odom frame, with the camera views alongside.
 
 The model comes from /robot_description (the same URDF robot_state_publisher
 serves), placed in the odom frame from odometry, wheels turned from
-/joint_states.
+/joint_states. The odom path is drawn in the 3D view and in a top-down view.
+
+Nav2: /goal_pose (what RViz's 2D Goal Pose publishes), /plan and /local_plan
+are drawn in both views. There is no localisation yet, map -> odom is an
+identity transform, so map poses are drawn as odom poses.
 
 Camera video is taken from the ffmpeg_image_transport topics
 (<camera>/image_raw/ffmpeg, H.264 or H.265 packets) and logged as an encoded
@@ -29,8 +33,8 @@ import tempfile
 import rclpy
 import rerun as rr
 import rerun.blueprint as rrb
-from geometry_msgs.msg import TwistStamped
-from nav_msgs.msg import Odometry
+from geometry_msgs.msg import PoseStamped, TwistStamped
+from nav_msgs.msg import Odometry, Path
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rerun.blueprint.components import PlayState
@@ -48,6 +52,27 @@ CAMERAS = ("head", "left", "right")
 FFMPEG_TYPE = "ffmpeg_image_transport_msgs/msg/FFMPEGPacket"
 AV_PKT_FLAG_KEY = 1
 
+# 3D entities that hold world (odom frame) coordinates
+WORLD_ENTITIES = ("world/odom_path", "world/goal", "world/plan", "world/local_plan")
+# a new path point is only logged after this much movement
+PATH_MIN_STEP = 0.02  # m
+PATH_MIN_TURN = 0.05  # rad
+PLAN_Z = 0.02  # lift plan/path lines a little off the floor grid
+
+# Okabe-Ito colours: measured in strong colours, commands in lighter ones.
+# linear velocity in blues and green, angular in oranges and purple.
+VELOCITY_SERIES = {
+    "velocity/odom_linear": ("odom vx", (0, 114, 178)),
+    "velocity/odom_angular": ("odom wz", (213, 94, 0)),
+    "velocity/cmd_linear": ("cmd vx", (86, 180, 233)),
+    "velocity/cmd_angular": ("cmd wz", (230, 159, 0)),
+    "velocity/nav_linear": ("nav vx", (0, 158, 115)),
+    "velocity/nav_angular": ("nav wz", (204, 121, 167)),
+}
+GOAL_COLOR = (0, 158, 115)
+PLAN_COLOR = (0, 158, 115)
+LOCAL_PLAN_COLOR = (230, 159, 0)
+
 
 def stamp_seconds(header):
     return header.stamp.sec + header.stamp.nanosec / 1e9
@@ -58,30 +83,32 @@ def yaw_from_quat(q):
 
 
 def blueprint(cameras):
-    camera_views = [
-        rrb.Spatial2DView(name=f"{name} camera", origin=f"/cameras/{name}") for name in cameras]
+    camera_row = [
+        rrb.Horizontal(*[
+            rrb.Spatial2DView(name=f"{name} camera", origin=f"/cameras/{name}")
+            for name in cameras])
+    ] if cameras else []
     return rrb.Blueprint(
         rrb.Horizontal(
             rrb.Vertical(
                 rrb.Spatial3DView(
                     name="Robot", origin="/",
                     contents=[
-                        "/xlerobot/**", "/transforms/**", "- /xlerobot/collision_geometries/**"],
+                        "/xlerobot/**", "/transforms/**", "/world/**",
+                        "- /xlerobot/collision_geometries/**"],
                     spatial_information=rrb.SpatialInformation(target_frame=ODOM_FRAME)),
                 rrb.Spatial2DView(
-                    name="Odom path", origin="/odom", contents=["/odom/path", "/odom/pose"]),
+                    name="Odometry (top view)", origin="/odom",
+                    contents=["/odom/path", "/odom/pose", "/odom/goal", "/odom/plan"]),
+                row_shares=[3, 2],
             ),
-            *([rrb.Vertical(*camera_views)] if camera_views else []),
             rrb.Vertical(
+                *camera_row,
+                rrb.TimeSeriesView(name="Velocities", origin="/velocity"),
                 rrb.TimeSeriesView(name="Yaw", origin="/odom/yaw"),
-                rrb.TimeSeriesView(
-                    name="Angular z",
-                    contents=["/odom/angular_z", "/cmd_vel/angular_z", "/cmd_vel_nav/angular_z"]),
-                rrb.TimeSeriesView(
-                    name="Linear x",
-                    contents=["/odom/linear_x", "/cmd_vel/linear_x", "/cmd_vel_nav/linear_x"]),
-                rrb.TimeSeriesView(name="Wheel velocity", origin="/wheels"),
+                row_shares=[3, 3, 1] if cameras else [3, 1],
             ),
+            column_shares=[3, 2],
         ),
         # follow the live edge, otherwise a fresh viewer sits at the start of the
         # recording, before the first odom transform, and draws no robot
@@ -89,17 +116,26 @@ def blueprint(cameras):
     )
 
 
+def log_static_setup():
+    for entity in WORLD_ENTITIES:
+        rr.log(entity, rr.CoordinateFrame(ODOM_FRAME), static=True)
+    for entity, (name, color) in VELOCITY_SERIES.items():
+        rr.log(entity, rr.SeriesLines(colors=[color], names=[name], widths=[2.0]), static=True)
+
+
 class RerunBridge(Node):
     def __init__(self):
         super().__init__("rerun_bridge")
-        self.path_x = []
-        self.path_y = []
+        self.path = []
         self.joints = {}
         self.create_subscription(Odometry, "/diff_drive_controller/odom", self.on_odom, 20)
         self.create_subscription(
             TwistStamped, "/diff_drive_controller/cmd_vel", self.on_cmd_vel_final, 20)
         self.create_subscription(TwistStamped, "/cmd_vel_nav", self.on_cmd_vel_nav, 20)
         self.create_subscription(JointState, "/joint_states", self.on_joint_states, 20)
+        self.create_subscription(PoseStamped, "/goal_pose", self.on_goal, 10)
+        self.create_subscription(Path, "/plan", self.on_plan, 10)
+        self.create_subscription(Path, "/local_plan", self.on_local_plan, 10)
         # robot_state_publisher latches the description, so match its durability.
         self.create_subscription(
             String, "/robot_description", self.on_robot_description,
@@ -110,6 +146,12 @@ class RerunBridge(Node):
         self.video_started = set()
         if FFMPEGPacket is not None:
             self.create_timer(2.0, self.find_cameras)
+
+    def set_time(self, header):
+        stamp = stamp_seconds(header)
+        if stamp <= 0.0:  # a publisher that leaves the stamp empty
+            stamp = self.get_clock().now().nanoseconds / 1e9
+        rr.set_time("ros_time", timestamp=stamp)
 
     def find_cameras(self):
         for topic, types in self.get_topic_names_and_types():
@@ -133,7 +175,7 @@ class RerunBridge(Node):
                 path, rr.VideoStream(codec=rr.VideoCodec.H265 if hevc else rr.VideoCodec.H264),
                 static=True)
             self.video_started.add(path)
-        rr.set_time("ros_time", timestamp=stamp_seconds(msg.header))
+        self.set_time(msg.header)
         rr.log(path, rr.VideoStream.from_fields(sample=bytes(msg.data), is_keyframe=keyframe))
 
     def on_robot_description(self, msg: String):
@@ -149,16 +191,15 @@ class RerunBridge(Node):
         self.get_logger().info(f"logged robot model, {len(self.joints)} movable joints")
 
     def on_odom(self, msg: Odometry):
-        rr.set_time("ros_time", timestamp=stamp_seconds(msg.header))
+        self.set_time(msg.header)
         p = msg.pose.pose.position
         q = msg.pose.pose.orientation
-        self.path_x.append(p.x)
-        self.path_y.append(p.y)
-        rr.log("odom/path", rr.LineStrips2D([list(zip(self.path_x, self.path_y))]))
+        yaw = yaw_from_quat(q)
+        self.log_path_point(p.x, p.y, yaw)
         rr.log("odom/pose", rr.Points2D([[p.x, p.y]]))
-        rr.log("odom/yaw", rr.Scalars(yaw_from_quat(q)))
-        rr.log("odom/linear_x", rr.Scalars(msg.twist.twist.linear.x))
-        rr.log("odom/angular_z", rr.Scalars(msg.twist.twist.angular.z))
+        rr.log("odom/yaw", rr.Scalars(yaw))
+        rr.log("velocity/odom_linear", rr.Scalars(msg.twist.twist.linear.x))
+        rr.log("velocity/odom_angular", rr.Scalars(msg.twist.twist.angular.z))
         rr.log(
             "transforms/base",
             rr.Transform3D(
@@ -166,18 +207,59 @@ class RerunBridge(Node):
                 rotation=rr.Quaternion(xyzw=[q.x, q.y, q.z, q.w]),
                 parent_frame=ODOM_FRAME, child_frame=BASE_FRAME))
 
+    def log_path_point(self, x, y, yaw):
+        """The full path is re-sent whenever it grows, so only add a point after real movement."""
+        if self.path:
+            lx, ly, lyaw = self.path[-1]
+            turn = abs(math.atan2(math.sin(yaw - lyaw), math.cos(yaw - lyaw)))
+            if math.hypot(x - lx, y - ly) < PATH_MIN_STEP and turn < PATH_MIN_TURN:
+                return
+        self.path.append((x, y, yaw))
+        points = [(px, py) for px, py, _ in self.path]
+        rr.log("odom/path", rr.LineStrips2D([points], colors=[(0, 114, 178)]))
+        rr.log(
+            "world/odom_path",
+            rr.LineStrips3D([[(px, py, PLAN_Z) for px, py in points]], colors=[(0, 114, 178)], radii=0.01))
+
+    def on_goal(self, msg: PoseStamped):
+        self.set_time(msg.header)
+        p = msg.pose.position
+        yaw = yaw_from_quat(msg.pose.orientation)
+        rr.log("odom/goal", rr.Points2D([[p.x, p.y]], colors=[GOAL_COLOR], radii=0.03))
+        rr.log("world/goal", rr.Arrows3D(
+            origins=[[p.x, p.y, PLAN_Z]],
+            vectors=[[0.4 * math.cos(yaw), 0.4 * math.sin(yaw), 0.0]],
+            colors=[GOAL_COLOR], radii=0.02, labels=["goal"]))
+        self.get_logger().info(f"goal ({p.x:.2f}, {p.y:.2f}) heading {math.degrees(yaw):.0f} deg")
+
+    def on_plan(self, msg: Path):
+        self.log_path_msg(msg, "world/plan", "odom/plan", PLAN_COLOR, 0.012)
+
+    def on_local_plan(self, msg: Path):
+        self.log_path_msg(msg, "world/local_plan", None, LOCAL_PLAN_COLOR, 0.008)
+
+    def log_path_msg(self, msg: Path, entity_3d, entity_2d, color, radius):
+        if not msg.poses:
+            return
+        self.set_time(msg.header)
+        points = [(pose.pose.position.x, pose.pose.position.y) for pose in msg.poses]
+        rr.log(entity_3d, rr.LineStrips3D(
+            [[(x, y, PLAN_Z) for x, y in points]], colors=[color], radii=radius))
+        if entity_2d:
+            rr.log(entity_2d, rr.LineStrips2D([points], colors=[color], radii=0.01))
+
     def on_cmd_vel_final(self, msg: TwistStamped):
-        rr.set_time("ros_time", timestamp=stamp_seconds(msg.header))
-        rr.log("cmd_vel/linear_x", rr.Scalars(msg.twist.linear.x))
-        rr.log("cmd_vel/angular_z", rr.Scalars(msg.twist.angular.z))
+        self.set_time(msg.header)
+        rr.log("velocity/cmd_linear", rr.Scalars(msg.twist.linear.x))
+        rr.log("velocity/cmd_angular", rr.Scalars(msg.twist.angular.z))
 
     def on_cmd_vel_nav(self, msg: TwistStamped):
-        rr.set_time("ros_time", timestamp=stamp_seconds(msg.header))
-        rr.log("cmd_vel_nav/linear_x", rr.Scalars(msg.twist.linear.x))
-        rr.log("cmd_vel_nav/angular_z", rr.Scalars(msg.twist.angular.z))
+        self.set_time(msg.header)
+        rr.log("velocity/nav_linear", rr.Scalars(msg.twist.linear.x))
+        rr.log("velocity/nav_angular", rr.Scalars(msg.twist.angular.z))
 
     def on_joint_states(self, msg: JointState):
-        rr.set_time("ros_time", timestamp=stamp_seconds(msg.header))
+        self.set_time(msg.header)
         for name, position, velocity in zip(msg.name, msg.position, msg.velocity):
             if name in ("left_wheel_joint", "right_wheel_joint"):
                 rr.log(f"wheels/{name}/velocity", rr.Scalars(velocity))
@@ -203,6 +285,7 @@ def main():
     elif args.connect:
         rr.connect_grpc(args.connect)
     rr.send_blueprint(blueprint([name for name in args.cameras.split(",") if name]))
+    log_static_setup()
     rclpy.init(args=ros_args)
     node = RerunBridge()
     try:
