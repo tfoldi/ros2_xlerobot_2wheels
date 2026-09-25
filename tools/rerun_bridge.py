@@ -211,7 +211,8 @@ def main():
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():  # rclpy's own signal handler may have shut the context down already
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":
