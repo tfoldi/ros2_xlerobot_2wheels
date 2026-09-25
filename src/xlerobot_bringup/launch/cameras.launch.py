@@ -1,5 +1,6 @@
 """USB cameras with H.264 video, from config/cameras.yaml. Included by
-bringup.launch.py with cameras:=true, or run standalone.
+bringup.launch.py with cameras:=true, or run standalone, optionally with
+config:=<other cameras.yaml> for a machine with different devices.
 
 One usb_cam node per camera whose device exists, in the namespace
 cameras/<name>. image_transport's ffmpeg plugin encodes on
@@ -11,14 +12,13 @@ import os
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import OpaqueFunction
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
 def _camera_nodes(context, *args, **kwargs):
-    config_path = os.path.join(
-        get_package_share_directory("xlerobot_bringup"), "config", "cameras.yaml")
-    with open(config_path) as f:
+    with open(LaunchConfiguration("config").perform(context)) as f:
         config = yaml.safe_load(f)
     d = config["defaults"]
 
@@ -53,4 +53,9 @@ def _camera_nodes(context, *args, **kwargs):
 
 
 def generate_launch_description():
-    return LaunchDescription([OpaqueFunction(function=_camera_nodes)])
+    default_config = os.path.join(
+        get_package_share_directory("xlerobot_bringup"), "config", "cameras.yaml")
+    return LaunchDescription([
+        DeclareLaunchArgument("config", default_value=default_config),
+        OpaqueFunction(function=_camera_nodes),
+    ])
