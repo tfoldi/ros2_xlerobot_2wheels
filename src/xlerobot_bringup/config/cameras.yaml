@@ -1,0 +1,28 @@
+# Cameras started by cameras.launch.py (bringup cameras:=true). A camera whose
+# device is not connected is skipped, so this can list all of them.
+# Devices are the udev symlinks from tools/xlerobot_setup_usb_modules.py.
+#
+# Each camera publishes <name>/image_raw plus its transports, the video one is
+# <name>/image_raw/ffmpeg (H.264 packets, what Rerun and the bag record).
+#
+# The cameras send MJPG, raw YUYV from three of them would not fit on USB 2.0.
+# The Jetson's ffmpeg has no hardware encoder that works here (its NVENC is the
+# desktop API), so encoding is libx264 in software, about 17% of one core per
+# camera at 640x480 30 fps. libx264 needs the preset/tune options to open.
+defaults:
+  width: 640
+  height: 480
+  fps: 30.0
+  pixel_format: mjpeg2rgb
+  encoder: libx264
+  encoder_options: "preset:ultrafast,tune:zerolatency"
+  bit_rate: 2000000
+  gop_size: 30
+
+cameras:
+  head:
+    device: /dev/xle-cam-head
+  left:
+    device: /dev/xle-cam-left
+  right:
+    device: /dev/xle-cam-right

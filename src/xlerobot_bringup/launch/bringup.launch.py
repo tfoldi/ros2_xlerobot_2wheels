@@ -17,8 +17,13 @@ no real ordering issue bringing both up together this way, unlike running
 teleop.launch.py standalone before bringup is up.
 
 record:=true records every topic to bags/<timestamp> (gitignored) for
-offline debugging. foxglove:=true starts foxglove_bridge on the default
+offline debugging, camera video as H.264 packets only (raw and the other
+image transports are left out, they are far too big and would make the
+cameras encode them). foxglove:=true starts foxglove_bridge on the default
 port 8765 for live inspection from Foxglove Studio. Both off by default.
+
+cameras:=true starts the USB cameras from config/cameras.yaml, see
+cameras.launch.py. Off by default, a camera that is not connected is skipped.
 """
 
 import datetime
@@ -102,6 +107,7 @@ def generate_launch_description():
     xacro_file = os.path.join(description_share, "urdf", "xlerobot.urdf.xacro")
     controllers_yaml = os.path.join(bringup_share, "config", "controllers.yaml")
     teleop_launch_file = os.path.join(teleop_share, "launch", "teleop.launch.py")
+    cameras_launch_file = os.path.join(bringup_share, "launch", "cameras.launch.py")
 
     bus1_port = LaunchConfiguration("bus1_port")
     bus2_port = LaunchConfiguration("bus2_port")
@@ -111,6 +117,7 @@ def generate_launch_description():
     with_head = LaunchConfiguration("with_head")
     record = LaunchConfiguration("record")
     foxglove = LaunchConfiguration("foxglove")
+    cameras = LaunchConfiguration("cameras")
 
     # Relative to wherever `ros2 launch` is run from - this repo's own convention (see
     # tools/*.py) is always the repo root, where bags/ is gitignored.
@@ -141,6 +148,7 @@ def generate_launch_description():
         DeclareLaunchArgument("with_head", default_value="false"),
         DeclareLaunchArgument("record", default_value="false"),
         DeclareLaunchArgument("foxglove", default_value="false"),
+        DeclareLaunchArgument("cameras", default_value="false"),
 
         # Must run before the Node actions below: OpaqueFunction is resolved
         # synchronously at this point in the list, so a raised error here
@@ -175,8 +183,14 @@ def generate_launch_description():
             condition=IfCondition(teleop),
         ),
 
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(cameras_launch_file),
+            condition=IfCondition(cameras),
+        ),
+
         ExecuteProcess(
-            cmd=["ros2", "bag", "record", "-a", "-o", bag_path],
+            cmd=["ros2", "bag", "record", "-a", "-o", bag_path,
+                 "--exclude-regex", r".*/image_raw(/compressed|/compressedDepth|/theora|/zstd)?"],
             condition=IfCondition(record),
             output="screen",
         ),
