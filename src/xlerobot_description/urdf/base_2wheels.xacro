@@ -133,7 +133,7 @@
         <material name="xle_grey"/>
       </visual>
       <collision>
-        <origin xyz="0 0 ${b['body_height']/2.0}" rpy="0 0 0"/>
+        <origin xyz="${b['body_x_offset']} 0 ${b['body_height']/2.0}" rpy="0 0 0"/>
         <geometry>
           <box size="${b['body_length']} ${b['body_width']} ${b['body_height']}"/>
         </geometry>

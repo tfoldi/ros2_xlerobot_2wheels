@@ -33,6 +33,10 @@ xlerobot:
     body_length: 0.450
     body_width:  0.405
     body_height: 0.780
+    # x of the body box centre in base_link (drive axle is x=0), matched to the
+    # centre of raskogbody.stl's footprint (x=-0.048 to 0.344). TODO check
+    # against the real cart's front and rear edges.
+    body_x_offset: 0.148
 
     # axle height above floor. Measured 62.5mm, same as wheel_radius - the
     # mount is not recessed.
