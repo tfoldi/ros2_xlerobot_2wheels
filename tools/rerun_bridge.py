@@ -106,7 +106,7 @@ def blueprint(cameras):
                 *camera_row,
                 rrb.TimeSeriesView(name="Velocities", origin="/velocity"),
                 rrb.TimeSeriesView(name="Yaw", origin="/odom/yaw"),
-                row_shares=[3, 3, 1] if cameras else [3, 1],
+                row_shares=[2, 3, 1.2] if cameras else [3, 1],
             ),
             column_shares=[3, 2],
         ),
@@ -196,7 +196,7 @@ class RerunBridge(Node):
         q = msg.pose.pose.orientation
         yaw = yaw_from_quat(q)
         self.log_path_point(p.x, p.y, yaw)
-        rr.log("odom/pose", rr.Points2D([[p.x, p.y]]))
+        rr.log("odom/pose", rr.Points2D([[p.x, p.y]], colors=[(213, 94, 0)], radii=0.02))
         rr.log("odom/yaw", rr.Scalars(yaw))
         rr.log("velocity/odom_linear", rr.Scalars(msg.twist.twist.linear.x))
         rr.log("velocity/odom_angular", rr.Scalars(msg.twist.twist.angular.z))
@@ -225,7 +225,7 @@ class RerunBridge(Node):
         self.set_time(msg.header)
         p = msg.pose.position
         yaw = yaw_from_quat(msg.pose.orientation)
-        rr.log("odom/goal", rr.Points2D([[p.x, p.y]], colors=[GOAL_COLOR], radii=0.03))
+        rr.log("odom/goal", rr.Points2D([[p.x, p.y]], colors=[GOAL_COLOR], radii=0.012))
         rr.log("world/goal", rr.Arrows3D(
             origins=[[p.x, p.y, PLAN_Z]],
             vectors=[[0.4 * math.cos(yaw), 0.4 * math.sin(yaw), 0.0]],
