@@ -96,7 +96,11 @@ def blueprint(cameras):
                     contents=[
                         "/xlerobot/**", "/transforms/**", "/world/**",
                         "- /xlerobot/collision_geometries/**"],
-                    spatial_information=rrb.SpatialInformation(target_frame=ODOM_FRAME)),
+                    spatial_information=rrb.SpatialInformation(target_frame=ODOM_FRAME),
+                    # from the front left and above, the whole robot with both arms and the
+                    # head in view, +z up
+                    eye_controls=rrb.EyeControls3D(
+                        position=(1.15, 0.9, 1.25), look_target=(0.1, 0.0, 0.75), eye_up=(0.0, 0.0, 1.0))),
                 rrb.Spatial2DView(
                     name="Odometry (top view)", origin="/odom",
                     contents=["/odom/path", "/odom/pose", "/odom/goal", "/odom/plan"]),
