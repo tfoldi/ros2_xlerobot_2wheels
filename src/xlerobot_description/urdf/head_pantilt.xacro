@@ -15,11 +15,21 @@
   <xacro:macro name="xlerobot_head" params="dims parent">
     <xacro:property name="h" value="${dims['head']}"/>
 
-    <!-- top base sits 0.323 m below and 0.103 m ahead of the pan axis -->
+    <!-- The top base sits on the arm mounting surface, 0.045 m below it as in the
+         upstream URDF, and 0.103 m ahead of the pan axis. head: mount_z is the
+         measured height of the junction where the pan servo's axis meets the head's
+         printed part, that is 0.073 m above the pan joint origin in the upstream
+         head meshes, so the origin is at mount_z - 0.073. That gives 0.325 m above
+         the top base, upstream has 0.323. If the neck were longer than upstream's,
+         neck_ext is the difference and a plain rod fills it. -->
+    <xacro:property name="top_base_z" value="${dims['arms']['mount_z'] - 0.045}"/>
+    <xacro:property name="pan_z" value="${h['mount_z'] - 0.073}"/>
+    <xacro:property name="pan_dz" value="${pan_z - top_base_z}"/>
+    <xacro:property name="neck_ext" value="${pan_dz - 0.323}"/>
     <joint name="top_base_joint" type="fixed">
       <parent link="${parent}"/>
       <child link="top_base_link"/>
-      <origin xyz="${h['mount_x'] + 0.103} ${h['mount_y']} ${h['mount_z'] - 0.323}" rpy="0 0 0"/>
+      <origin xyz="${h['mount_x'] + 0.103} ${h['mount_y']} ${top_base_z}" rpy="0 0 0"/>
     </joint>
 
     <link name="top_base_link">
@@ -42,6 +52,13 @@
         </geometry>
         <material name="xle_motor"/>
       </visual>
+      <xacro:if value="${neck_ext > 0.01}">
+        <visual>
+          <origin xyz="-0.103 0 ${0.323 + neck_ext / 2.0}" rpy="0 0 0"/>
+          <geometry><cylinder radius="0.03" length="${neck_ext}"/></geometry>
+          <material name="xle_motor"/>
+        </visual>
+      </xacro:if>
     </link>
 
     <link name="head_pan_link">
@@ -69,7 +86,7 @@
     <joint name="head_pan_joint" type="revolute">
       <parent link="top_base_link"/>
       <child link="head_pan_link"/>
-      <origin xyz="-0.103 0 0.323" rpy="0 0 0"/>
+      <origin xyz="-0.103 0 ${pan_dz}" rpy="0 0 0"/>
       <axis xyz="0 0 1"/>
       <limit lower="${h['pan_limit_lower']}" upper="${h['pan_limit_upper']}" effort="2.0" velocity="3.0"/>
     </joint>
@@ -109,7 +126,8 @@
     <joint name="head_camera_mount_joint" type="fixed">
       <parent link="head_tilt_link"/>
       <child link="head_camera_mount"/>
-      <origin xyz="0.025 0 0.03" rpy="0 0 0"/>
+      <!-- z puts the lens centre at head: camera_z above the floor -->
+      <origin xyz="0.025 0 ${h['camera_z'] - pan_z - 0.09815}" rpy="0 0 0"/>
     </joint>
   </xacro:macro>
 </robot>

@@ -94,10 +94,17 @@ xlerobot:
     #    0.056 (5.6 cm behind the axle line in base_link). The cart mesh position
     #    relative to the drive axle comes from that URDF and is not measured, so x
     #    is right relative to the cart, not yet to the wheels.
-    # z: that URDF's value, TODO measure the pan axis height on the robot.
+    # z: measured, floor to the top of the pan servo where its axis meets the printed
+    #    part, 1.118 m. In the upstream head meshes that junction is 0.073 m above the
+    #    pan joint origin, which puts the origin 0.325 m above the top base, upstream
+    #    has 0.323, so the neck matches upstream's (see head_pantilt.xacro).
+    # camera_z: measured, floor to the head camera lens centre, 1.183 m, upstream's
+    #    camera position gives 1.173. It is a plain USB camera, not the depth camera
+    #    that URDF's head is made for.
     mount_x: 0.056
     mount_y: 0.0
-    mount_z: 1.053
+    mount_z: 1.118
+    camera_z: 1.183
     # that URDF's limits, TODO check against the mechanical stops
     pan_limit_lower: -3.2       # rad
     pan_limit_upper:  3.2
@@ -112,7 +119,7 @@ xlerobot:
   #   hardware/step/XLeRobot_040/XLeRobot040_armbase.step).
   # mount_y: pan axis position, 273 mm apart (CAD, confirmed on the robot). That URDF
   #   has them 310 mm apart.
-  # mount_z: the cart top plate, that URDF's value, TODO measure on the robot.
+  # mount_z: measured, floor to the bottom of the arm base (its origin), 0.765 m.
   # left_yaw, right_yaw: rotation of each arm base about z, the 0.4.0 arm base can be
   #   mounted in any direction. At the zero pose the stretched arm points to the
   #   front with -1.5708, sideways with 0 or 3.14159, to the back with 1.5708. The
@@ -121,6 +128,6 @@ xlerobot:
   arms:
     mount_x: 0.056
     mount_y: 0.1365
-    mount_z: 0.775
+    mount_z: 0.765
     right_yaw: -1.57079633
     left_yaw: -1.57079633
