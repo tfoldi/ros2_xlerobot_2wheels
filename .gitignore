@@ -24,3 +24,7 @@ __pycache__/
 
 # rosbag recordings, bringup.launch.py record:=true
 /bags/
+
+# slam_toolbox pose graphs, several MB each, kept on the robot
+/src/xlerobot_navigation/maps/*.posegraph
+/src/xlerobot_navigation/maps/*.data
