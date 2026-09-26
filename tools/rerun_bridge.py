@@ -54,6 +54,7 @@ except ImportError:
 ODOM_FRAME = "odom"
 BASE_FRAME = "base_footprint"
 LIDAR_FRAME = "ldlidar_link"
+LIDAR_ENTITIES = ("lidar/scan", "lidar/zero")
 CAMERAS = ("head", "left", "right")
 FFMPEG_TYPE = "ffmpeg_image_transport_msgs/msg/FFMPEGPacket"
 AV_PKT_FLAG_KEY = 1
@@ -140,7 +141,8 @@ def blueprint(cameras):
 def log_static_setup():
     for entity in WORLD_ENTITIES:
         rr.log(entity, rr.CoordinateFrame(ODOM_FRAME), static=True)
-    rr.log("lidar", rr.CoordinateFrame(LIDAR_FRAME), static=True)
+    for entity in LIDAR_ENTITIES:
+        rr.log(entity, rr.CoordinateFrame(LIDAR_FRAME), static=True)
     rr.log("world/front", rr.CoordinateFrame("base_link"), static=True)
     rr.log("world/front", rr.Arrows3D(
         origins=[[0.0, 0.0, 0.0]], vectors=[[0.6, 0.0, 0.0]],
