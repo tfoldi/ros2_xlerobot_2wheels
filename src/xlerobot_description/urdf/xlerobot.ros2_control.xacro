@@ -59,21 +59,21 @@
   <!-- One arm joint. The limits and the centre come from arms.joints in robot_dimensions.yaml
        and match so101_arm.xacro: with direction +1 the model's joint is reversed against the
        source URDF, so the limits are mirrored. -->
-  <xacro:macro name="sts_arm_joint" params="name id j read_only">
+  <xacro:macro name="sts_arm_joint" params="name id j side read_only">
     <xacro:property name="m" value="${-j['direction']}"/>
     <xacro:sts_position_joint name="${name}" id="${id}"
         lower="${min(m * j['lower'], m * j['upper'])}" upper="${max(m * j['lower'], m * j['upper'])}"
-        center="${j['zero_step']}" read_only="${read_only}"/>
+        center="${j['zero_step'][side]}" read_only="${read_only}"/>
   </xacro:macro>
 
   <!-- The six joints of one arm, IDs 1-6, names as in so101_arm.xacro. -->
-  <xacro:macro name="sts_arm_joints" params="prefix read_only joints">
-    <xacro:sts_arm_joint name="${prefix}_shoulder_pan_joint"  id="1" j="${joints['shoulder_pan']}"  read_only="${read_only}"/>
-    <xacro:sts_arm_joint name="${prefix}_shoulder_lift_joint" id="2" j="${joints['shoulder_lift']}" read_only="${read_only}"/>
-    <xacro:sts_arm_joint name="${prefix}_elbow_flex_joint"    id="3" j="${joints['elbow_flex']}"    read_only="${read_only}"/>
-    <xacro:sts_arm_joint name="${prefix}_wrist_flex_joint"    id="4" j="${joints['wrist_flex']}"    read_only="${read_only}"/>
-    <xacro:sts_arm_joint name="${prefix}_wrist_roll_joint"    id="5" j="${joints['wrist_roll']}"    read_only="${read_only}"/>
-    <xacro:sts_arm_joint name="${prefix}_gripper_joint"       id="6" j="${joints['gripper']}"       read_only="${read_only}"/>
+  <xacro:macro name="sts_arm_joints" params="prefix side read_only joints">
+    <xacro:sts_arm_joint name="${prefix}_shoulder_pan_joint"  id="1" j="${joints['shoulder_pan']}" side="${side}"  read_only="${read_only}"/>
+    <xacro:sts_arm_joint name="${prefix}_shoulder_lift_joint" id="2" j="${joints['shoulder_lift']}" side="${side}" read_only="${read_only}"/>
+    <xacro:sts_arm_joint name="${prefix}_elbow_flex_joint"    id="3" j="${joints['elbow_flex']}" side="${side}"    read_only="${read_only}"/>
+    <xacro:sts_arm_joint name="${prefix}_wrist_flex_joint"    id="4" j="${joints['wrist_flex']}" side="${side}"    read_only="${read_only}"/>
+    <xacro:sts_arm_joint name="${prefix}_wrist_roll_joint"    id="5" j="${joints['wrist_roll']}" side="${side}"    read_only="${read_only}"/>
+    <xacro:sts_arm_joint name="${prefix}_gripper_joint"       id="6" j="${joints['gripper']}" side="${side}"       read_only="${read_only}"/>
   </xacro:macro>
 
   <xacro:macro name="xlerobot_ros2_control" params="bus1_port bus2_port use_mock_hardware with_arms torque_off with_head dims">
@@ -98,7 +98,7 @@
         </hardware>
 
         <xacro:if value="${with_arms}">
-          <xacro:sts_arm_joints prefix="left_arm" read_only="${torque_off}" joints="${dims['arms']['joints']}"/>
+          <xacro:sts_arm_joints prefix="left_arm" side="left" read_only="${torque_off}" joints="${dims['arms']['joints']}"/>
         </xacro:if>
 
         <xacro:if value="${with_head}">
@@ -126,7 +126,7 @@
       </hardware>
 
       <xacro:if value="${with_arms}">
-        <xacro:sts_arm_joints prefix="right_arm" read_only="${torque_off}" joints="${dims['arms']['joints']}"/>
+        <xacro:sts_arm_joints prefix="right_arm" side="right" read_only="${torque_off}" joints="${dims['arms']['joints']}"/>
       </xacro:if>
 
       <!-- The RIGHT motor is mounted mirrored (confirmed on the real robot by

@@ -141,25 +141,27 @@ xlerobot:
     right_yaw: -1.57079633
     left_yaw: -1.57079633
 
-    # The SO-101 joints, the same for both arms. lower/upper are the limits of the shared
-    # upstream URDF, in its joint direction. The servos are calibrated with
-    # tools/calibrate_arm.py (lerobot's procedure), which makes step 2047 the middle of
-    # each joint's range, and these two numbers say how the model's joints relate to that:
-    # zero_step: the servo step where the model's joint angle is 0 (arm stretched straight).
+    # The SO-101 joints. lower/upper are the limits of the shared upstream URDF, in its joint
+    # direction, the same for both arms. The servos are calibrated with
+    # tools/calibrate_arm.py (lerobot's procedure), which makes step 2047 the middle of each
+    # joint's range, and these say how the model's joints relate to that:
+    # zero_step: the servo step where the model's joint angle is 0 (arm stretched straight),
+    #   per arm because each arm's middle was set by hand. Read off the arms held stretched
+    #   straight (calibrate_arm.py status), except the gripper: an estimate from the end stops
+    #   swept during calibration, good to a few degrees.
     # direction: +1 if the servo step increases with the upstream joint angle, -1 if it
-    #   decreases. The driver reports (center - step), so -1 is its own direction, and for
-    #   +1 so101_arm.xacro reverses the joint axis and mirrors the limits, which gives the
-    #   same pose. Both are first estimates from the end stops swept during calibration
-    #   (accurate to a few degrees, the folded rest pose only fits lift -1 and elbow +1) and
-    #   the direction of pan, wrist flex, wrist roll and gripper is a guess. TODO check each
-    #   joint by moving it by hand in Rerun, and the zero pose with the arm stretched out.
+    #   decreases. The driver reports (center - step), so -1 is its own direction, and for +1
+    #   so101_arm.xacro reverses the joint axis and mirrors the limits, which gives the same
+    #   pose. Shoulder lift -1 and elbow +1 are certain (the folded rest pose only fits that
+    #   way, and the elbow then rests at its 3.14 limit). Pan, wrist flex, wrist roll and
+    #   gripper are guesses. TODO check each by moving it by hand in Rerun.
     joints:
-      shoulder_pan:  {zero_step: 2047, direction:  1, lower: -2.16,       upper: 2.16}
-      shoulder_lift: {zero_step: 3078, direction: -1, lower: -0.22,       upper: 3.37}
-      elbow_flex:    {zero_step: 1042, direction:  1, lower: -0.22,       upper: 3.14}
-      wrist_flex:    {zero_step: 2011, direction:  1, lower: -1.6580628,  upper: 1.6580627}
-      wrist_roll:    {zero_step: 2047, direction: -1, lower: -2.7438473,  upper: 2.8412063}
-      gripper:       {zero_step: 1775, direction:  1, lower: -0.374533,   upper: 1.7453292}
+      shoulder_pan:  {zero_step: {left: 2057, right: 2075}, direction:  1, lower: -2.16,      upper: 2.16}
+      shoulder_lift: {zero_step: {left: 3197, right: 3070}, direction: -1, lower: -0.22,      upper: 3.37}
+      elbow_flex:    {zero_step: {left:  989, right: 1056}, direction:  1, lower: -0.22,      upper: 3.14}
+      wrist_flex:    {zero_step: {left: 1978, right: 1991}, direction:  1, lower: -1.6580628, upper: 1.6580627}
+      wrist_roll:    {zero_step: {left: 2079, right: 2018}, direction: -1, lower: -2.7438473, upper: 2.8412063}
+      gripper:       {zero_step: {left: 1775, right: 1775}, direction:  1, lower: -0.374533,  upper: 1.7453292}
 
   # --- LD19 2D lidar, upside down under the second basket ---
   # x, y: measured, centred and in line with the drive axle, base_link frame (front is +x).
