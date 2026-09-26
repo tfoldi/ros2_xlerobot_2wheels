@@ -311,7 +311,7 @@ class RerunBridge(Node):
             return np.column_stack([ox + (cols + 0.5) * res, oy + (rows + 0.5) * res, np.zeros(len(rows))])
 
         rr.log("world/map/occupied", rr.Points3D(cells(grid >= 65, 1), colors=[(240, 240, 240)], radii=res / 2))
-        rr.log("world/map/free", rr.Points3D(cells(grid == 0, 2), colors=[(45, 70, 85)], radii=res))
+        rr.log("world/map/free", rr.Points3D(cells(grid == 0, 2), colors=[(45, 70, 85)], radii=0.6 * res))
 
     def on_scan(self, msg: LaserScan):
         self.set_time(msg.header)
