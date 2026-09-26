@@ -104,8 +104,34 @@
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
 
-    <!-- base_link origin is on the floor, between the drive wheels -->
+    <!-- base_link origin is on the floor, between the drive wheels, x points to
+         the front of the robot: the end with the drive wheels, where the arms
+         and the head camera face and where it drives. Only the inertial is here. -->
     <link name="base_link">
+      <!-- inertia about the real CoM, not the box centre. Cart is top heavy
+           and this is what sets the accel limits. -->
+      <inertial>
+        <origin xyz="0 0 ${b['com_height']}" rpy="0 0 0"/>
+        <mass value="${b['body_mass']}"/>
+        <inertia
+          ixx="${b['body_mass']*(b['body_width']**2 + b['body_height']**2)/12.0}" ixy="0" ixz="0"
+          iyy="${b['body_mass']*(b['body_length']**2 + b['body_height']**2)/12.0}" iyz="0"
+          izz="${b['body_mass']*(b['body_length']**2 + b['body_width']**2)/12.0}"/>
+      </inertial>
+    </link>
+
+    <!-- The cart, the arms and the head are described in the frame of the shared
+         upstream URDF (simulation/xlerobot/xlerobot.urdf of the XLeRobot repo),
+         where the front is -x: drive wheels at the front, casters behind. body_link
+         is that frame, base_link turned 180 degrees about z, so their numbers can
+         be used as they are. The drive wheels stay on base_link. -->
+    <joint name="body_joint" type="fixed">
+      <parent link="base_link"/>
+      <child  link="body_link"/>
+      <origin xyz="0 0 0" rpy="0 0 ${pi}"/>
+    </joint>
+
+    <link name="body_link">
       <!-- raskogbody.stl, from upstream's own Isaac Sim asset bundle
            (Apache-2.0, simulation/Isaac_sim/xlerobot.zip), same IKEA RASKOG
            cart this robot is built on. The offset here is derived, not
@@ -138,16 +164,6 @@
           <box size="${b['body_length']} ${b['body_width']} ${b['body_height']}"/>
         </geometry>
       </collision>
-      <!-- inertia about the real CoM, not the box centre. Cart is top heavy
-           and this is what sets the accel limits. -->
-      <inertial>
-        <origin xyz="0 0 ${b['com_height']}" rpy="0 0 0"/>
-        <mass value="${b['body_mass']}"/>
-        <inertia
-          ixx="${b['body_mass']*(b['body_width']**2 + b['body_height']**2)/12.0}" ixy="0" ixz="0"
-          iyy="${b['body_mass']*(b['body_length']**2 + b['body_height']**2)/12.0}" iyz="0"
-          izz="${b['body_mass']*(b['body_length']**2 + b['body_width']**2)/12.0}"/>
-      </inertial>
     </link>
 
     <xacro:drive_wheel prefix="left"  reflect="1"  dims="${dims}"/>

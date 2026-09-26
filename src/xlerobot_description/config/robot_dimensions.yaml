@@ -51,14 +51,13 @@ xlerobot:
     # them. No encoder on any of them, so each is a fixed sphere in the URDF.
     # Diameter measured 55mm.
     caster_radius: 0.0275
-    # Checked against the real cart body mesh's footprint in Isaac Sim via
-    # get_prim_bounds, base_link frame: raskogbody spans x=-0.048 to
-    # x=0.345 (drive axle is x=0). Rear inset matches the earlier fix
-    # (sits just inside the rear edge); front mirrors that same inset off
-    # the front edge. Neither measured against the real robot's actual leg
-    # positions, just checked to not float in visibly empty space.
-    caster_rear_x_offset: -0.04
-    caster_front_x_offset: 0.31
+    # base_link frame, front is +x (the drive-wheel end, where the arms and the
+    # head camera face). The cart body mesh spans x=-0.345 to x=0.048 (drive axle
+    # is x=0), the casters sit just inside its ends. Not measured against the real
+    # robot's actual leg positions, just checked to not float in visibly empty
+    # space, and taken from the shared upstream URDF's cart placement.
+    caster_rear_x_offset: -0.31
+    caster_front_x_offset: 0.04
     # TODO measure. Estimated from the corrected body_width (0.405m), not
     # measured directly - casters sit near the corners, inset a bit from
     # the body edge. Same value used for front and rear pairs.
@@ -86,12 +85,15 @@ xlerobot:
 
   # --- head pan/tilt, IDs 7 and 8 on bus1 ---
   head:
-    # pan servo axis in base_link. The neck and head parts are the ones in
-    # simulation/xlerobot/xlerobot.urdf of the XLeRobot repo (xlerobot_urdf.zip).
-    # x: measured, the mast axis is 70 mm from the rim of the top basket nearest the
-    #    drive wheels, that rim is at x=-0.014 in the cart mesh, so 0.056. The cart
-    #    mesh position relative to the drive axle comes from that URDF and is not
-    #    measured, so x is right relative to the cart, not yet to the wheels.
+    # pan servo axis in the BODY frame (see base_2wheels.xacro: base_link turned 180
+    # degrees about z, front is -x), the frame of the shared upstream URDF. The neck
+    # and head parts are the ones in simulation/xlerobot/xlerobot.urdf of the
+    # XLeRobot repo (xlerobot_urdf.zip).
+    # x: measured, the mast axis is 70 mm from the front rim of the top basket, the
+    #    one nearest the drive wheels, that rim is at x=-0.014 in the cart mesh, so
+    #    0.056 (5.6 cm behind the axle line in base_link). The cart mesh position
+    #    relative to the drive axle comes from that URDF and is not measured, so x
+    #    is right relative to the cart, not yet to the wheels.
     # z: that URDF's value, TODO measure the pan axis height on the robot.
     mount_x: 0.056
     mount_y: 0.0
@@ -104,21 +106,21 @@ xlerobot:
 
   # --- arms, two SO-101 on the cart top, IDs 1-6 (left on bus1, right on bus2) ---
   # The arm meshes, links and joints are those in simulation/xlerobot/xlerobot.urdf
-  # of the XLeRobot repo (xlerobot_urdf.zip), zero pose stretched out to the side.
-  # Left is +y, right is -y.
+  # of the XLeRobot repo (xlerobot_urdf.zip), zero pose stretched straight. All of
+  # this is in the body frame, front is -x, the robot's left is +y there.
   # mount_x: the shoulder pan axes are at the mast's x (0.4.0 CAD,
   #   hardware/step/XLeRobot_040/XLeRobot040_armbase.step).
   # mount_y: pan axis position, 273 mm apart (CAD, confirmed on the robot). That URDF
   #   has them 310 mm apart.
   # mount_z: the cart top plate, that URDF's value, TODO measure on the robot.
   # left_yaw, right_yaw: rotation of each arm base about z, the 0.4.0 arm base can be
-  #   mounted in any direction. With yaw 0 an arm stretches out to its right (-y) at
-  #   the zero pose, with 3.14159 to its left. The original URDF has right 0 and left
-  #   3.14159, both arms sideways. Both forward would be 1.5708 for both, both
-  #   backward -1.5708. TODO check which one matches how the robot is built.
+  #   mounted in any direction. At the zero pose the stretched arm points to the
+  #   front with -1.5708, sideways with 0 or 3.14159, to the back with 1.5708. The
+  #   shared URDF has the arms sideways (right 0, left 3.14159), the real robot has
+  #   both pointing forward (official assembly video, confirmed by the user).
   arms:
     mount_x: 0.056
     mount_y: 0.1365
     mount_z: 0.775
-    right_yaw: 0.0
-    left_yaw: 3.14159265
+    right_yaw: -1.57079633
+    left_yaw: -1.57079633

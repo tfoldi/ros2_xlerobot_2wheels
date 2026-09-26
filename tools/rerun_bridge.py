@@ -100,7 +100,7 @@ def blueprint(cameras):
                     # from the front left and above, the whole robot with both arms and the
                     # head in view, +z up
                     eye_controls=rrb.EyeControls3D(
-                        position=(1.15, 0.9, 1.25), look_target=(0.1, 0.0, 0.75), eye_up=(0.0, 0.0, 1.0))),
+                        position=(1.25, 0.95, 1.3), look_target=(-0.1, 0.0, 0.75), eye_up=(0.0, 0.0, 1.0))),
                 rrb.Spatial2DView(
                     name="Odometry (top view)", origin="/odom",
                     contents=["/odom/path", "/odom/pose", "/odom/goal", "/odom/plan"]),

@@ -43,7 +43,7 @@
   <xacro:include filename="$(find xlerobot_description)/urdf/sensors.xacro"/>
 
   <xacro:xlerobot_base dims="${dims}"/>
-  <xacro:xlerobot_head dims="${dims}" parent="base_link"/>
+  <xacro:xlerobot_head dims="${dims}" parent="body_link"/>
   <xacro:xlerobot_sensors sensor="$(arg sensor)" dims="${dims}"/>
 
   <xacro:if value="$(arg with_arms)">
@@ -57,11 +57,11 @@
          directions, so the yaws are a build choice. -->
     <xacro:property name="a" value="${dims['arms']}"/>
     <xacro:property name="pan_off" value="0.0452"/>
-    <xacro:so101_arm prefix="left_arm"  parent="base_link"
-        xyz="${a['mount_x'] - pan_off * sin(a['left_yaw'])}  ${a['mount_y'] + pan_off * cos(a['left_yaw'])} ${a['mount_z']}"
+    <xacro:so101_arm prefix="left_arm"  parent="body_link"
+        xyz="${a['mount_x'] - pan_off * sin(a['left_yaw'])} ${-a['mount_y'] + pan_off * cos(a['left_yaw'])} ${a['mount_z']}"
         rpy="0 0 ${a['left_yaw']}"/>
-    <xacro:so101_arm prefix="right_arm" parent="base_link"
-        xyz="${a['mount_x'] - pan_off * sin(a['right_yaw'])} ${-a['mount_y'] + pan_off * cos(a['right_yaw'])} ${a['mount_z']}"
+    <xacro:so101_arm prefix="right_arm" parent="body_link"
+        xyz="${a['mount_x'] - pan_off * sin(a['right_yaw'])}  ${a['mount_y'] + pan_off * cos(a['right_yaw'])} ${a['mount_z']}"
         rpy="0 0 ${a['right_yaw']}"/>
   </xacro:if>
 
