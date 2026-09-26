@@ -49,8 +49,8 @@ one starts.
      zero as `position_center_steps`, and where the direction differs from the driver's,
      `so101_arm.xacro` reverses the joint axis and mirrors the limits. The values are
      read off the arms held stretched straight (`status`, per arm, the gripper is an estimate
-     from the calibration end stops). The directions of pan, wrist flex, wrist roll and
-     gripper are checked by moving each joint by hand in Rerun. The head is the same with
+     from the calibration end stops). The directions are checked by moving each joint by hand in
+     Rerun. The head is the same with
      `head.pan_zero_step` and `head.pan_direction` (and tilt).
      The interface has a `one_key_calibration` service that changes the servo's stored
      midpoint, it is a maintenance tool and not used here.

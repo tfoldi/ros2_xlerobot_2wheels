@@ -114,7 +114,7 @@ xlerobot:
     # Servo calibration is tools/calibrate_arm.py --arm head, the head looking straight ahead
     # and level is step 2047, and that is the model's zero. direction: +1 if the servo step
     # increases with the joint angle, -1 if it decreases (what the driver reports natively,
-    # see the arms below). Not checked against the real head yet, TODO.
+    # see the arms below). Checked by moving the head by hand in Rerun.
     pan_zero_step: 2047
     pan_direction: -1
     tilt_zero_step: 2047
@@ -152,9 +152,7 @@ xlerobot:
     # direction: +1 if the servo step increases with the upstream joint angle, -1 if it
     #   decreases. The driver reports (center - step), so -1 is its own direction, and for +1
     #   so101_arm.xacro reverses the joint axis and mirrors the limits, which gives the same
-    #   pose. Shoulder lift -1 and elbow +1 are certain (the folded rest pose only fits that
-    #   way, and the elbow then rests at its 3.14 limit). Pan, wrist flex, wrist roll and
-    #   gripper are guesses. TODO check each by moving it by hand in Rerun.
+    #   pose. Checked by moving every joint by hand in Rerun.
     joints:
       shoulder_pan:  {zero_step: {left: 2057, right: 2075}, direction:  1, lower: -2.16,      upper: 2.16}
       shoulder_lift: {zero_step: {left: 3197, right: 3070}, direction: -1, lower: -0.22,      upper: 3.37}
