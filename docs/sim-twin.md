@@ -17,10 +17,10 @@ position on its own convention (see `sum_wrapped_joint_states` below),
 which is a different problem from R1 and does not substitute for hardware
 validation of it.
 
-Arms are not included in the current scene (still placeholder geometry,
-phase 3 not started). `xlerobot.ros2_control_sim.xacro` supports
-`with_arms:=true`; extending `sim/build_isaac_scene.py`'s joint list is
-the only change needed to include them.
+Arms are not included in the current scene. The description has both SO-101
+arms (`with_arms:=true`) and `xlerobot.ros2_control_sim.xacro` declares their
+joints; importing with `with_arms:=true` and extending
+`sim/build_isaac_scene.py`'s joint list is what is needed to include them.
 
 ## Requirements
 
@@ -241,7 +241,7 @@ afterward.
   see the note above `## Running headless`. `base_link`'s cart body mesh
   placement is derived from upstream's reference numbers, not measured
   against this specific robot.
-- Arms are not in the scene yet (phase 3 hasn't started); only base + head.
+- Arms are not in the scene yet, only base and head.
 
 ## Omniverse MCP (optional)
 

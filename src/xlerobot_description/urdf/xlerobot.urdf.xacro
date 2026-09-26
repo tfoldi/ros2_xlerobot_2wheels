@@ -23,8 +23,9 @@
   <xacro:arg name="use_sim"           default="false"/>
   <xacro:arg name="bus1_port"         default="/dev/xle-bus1"/>
   <xacro:arg name="bus2_port"         default="/dev/xle-bus2"/>
-  <!-- none | vlp16 | gemini | realsense, see ADR-0003 -->
-  <xacro:arg name="sensor"            default="none"/>
+  <!-- none | usbcam | vlp16 | gemini | realsense, see ADR-0003. usbcam is the head
+       camera the robot has today. -->
+  <xacro:arg name="sensor"            default="usbcam"/>
   <!-- arms are phase 3, description only for now -->
   <xacro:arg name="with_arms"         default="false"/>
   <!-- head pan/tilt (bus1, motor_id 7/8) is phase 3 too - not wired on the
@@ -47,10 +48,13 @@
 
   <xacro:if value="$(arg with_arms)">
     <xacro:include filename="$(find xlerobot_description)/urdf/so101_arm.xacro"/>
-    <!-- TODO mount offsets not measured. 0.4.0 top base allows different arm
-         directions, so this is a build choice, not a constant. -->
-    <xacro:so101_arm prefix="left_arm"  parent="base_link" xyz="0  0.12 0.78" rpy="0 0 0"/>
-    <xacro:so101_arm prefix="right_arm" parent="base_link" xyz="0 -0.12 0.78" rpy="0 0 0"/>
+    <!-- Mount pose from robot_dimensions.yaml, not measured yet. 0.4.0 top base
+         allows different arm directions, so the yaw is a build choice. -->
+    <xacro:property name="a" value="${dims['arms']}"/>
+    <xacro:so101_arm prefix="left_arm"  parent="base_link"
+        xyz="${a['mount_x']}  ${a['mount_y']} ${a['mount_z']}" rpy="0 0 ${a['mount_yaw']}"/>
+    <xacro:so101_arm prefix="right_arm" parent="base_link"
+        xyz="${a['mount_x']} ${-a['mount_y']} ${a['mount_z']}" rpy="0 0 ${a['mount_yaw']}"/>
   </xacro:if>
 
   <xacro:if value="$(arg use_ros2_control)">

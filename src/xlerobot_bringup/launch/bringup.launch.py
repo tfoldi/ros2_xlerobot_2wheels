@@ -80,8 +80,9 @@ def _check_serial_ports_free(context, *args, **kwargs):
         return []  # no real serial port gets opened in either mode
 
     with_head = LaunchConfiguration("with_head").perform(context) == "true"
+    with_arms = LaunchConfiguration("with_arms").perform(context) == "true"
     ports = [LaunchConfiguration("bus2_port").perform(context)]
-    if with_head:
+    if with_head or with_arms:
         ports.append(LaunchConfiguration("bus1_port").perform(context))
 
     problems = []
@@ -115,6 +116,7 @@ def generate_launch_description():
     use_sim = LaunchConfiguration("use_sim")
     teleop = LaunchConfiguration("teleop")
     with_head = LaunchConfiguration("with_head")
+    with_arms = LaunchConfiguration("with_arms")
     record = LaunchConfiguration("record")
     foxglove = LaunchConfiguration("foxglove")
     cameras = LaunchConfiguration("cameras")
@@ -131,7 +133,7 @@ def generate_launch_description():
             " use_sim:=", use_sim,
             " bus1_port:=", bus1_port,
             " bus2_port:=", bus2_port,
-            " with_arms:=false",
+            " with_arms:=", with_arms,
             " with_head:=", with_head,
         ]),
         value_type=str,
@@ -146,6 +148,10 @@ def generate_launch_description():
         # off by default: bus1 (head pan/tilt) isn't wired on a base-only
         # robot, see xlerobot.urdf.xacro. Flip on once the head is plugged in.
         DeclareLaunchArgument("with_head", default_value="false"),
+        # off by default for the same reason: both SO-101 arms are on bus1/bus2, and
+        # with_arms:=true adds their joints to ros2_control (real buses, or use
+        # use_mock_hardware:=true to see the model). Controllers come with phase 3.
+        DeclareLaunchArgument("with_arms", default_value="false"),
         DeclareLaunchArgument("record", default_value="false"),
         DeclareLaunchArgument("foxglove", default_value="false"),
         DeclareLaunchArgument("cameras", default_value="false"),

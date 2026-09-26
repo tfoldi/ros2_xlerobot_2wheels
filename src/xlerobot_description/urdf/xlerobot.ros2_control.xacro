@@ -50,6 +50,17 @@
     </joint>
   </xacro:macro>
 
+  <!-- The six SO-101 joints of one arm, IDs 1-6. Names match so101_arm.xacro,
+       limits are the SO-101 model's (so_arm_description). -->
+  <xacro:macro name="sts_arm_joints" params="prefix">
+    <xacro:sts_position_joint name="${prefix}_shoulder_pan_joint"  id="1" lower="-1.91986" upper="1.91986"/>
+    <xacro:sts_position_joint name="${prefix}_shoulder_lift_joint" id="2" lower="-1.74533" upper="1.74533"/>
+    <xacro:sts_position_joint name="${prefix}_elbow_flex_joint"    id="3" lower="-1.69"    upper="1.69"/>
+    <xacro:sts_position_joint name="${prefix}_wrist_flex_joint"    id="4" lower="-1.65806" upper="1.65806"/>
+    <xacro:sts_position_joint name="${prefix}_wrist_roll_joint"    id="5" lower="-2.74385" upper="2.84121"/>
+    <xacro:sts_position_joint name="${prefix}_gripper_joint"       id="6" lower="-1.74533" upper="0.174533"/>
+  </xacro:macro>
+
   <xacro:macro name="xlerobot_ros2_control" params="bus1_port bus2_port use_mock_hardware with_arms with_head dims">
 
     <xacro:property name="b"      value="${dims['base']}"/>
@@ -72,14 +83,7 @@
         </hardware>
 
         <xacro:if value="${with_arms}">
-          <!-- phase 3. Limits are placeholders, check against
-               adityakamath/so_arm_ros2 and ros-physical-ai/ros2_so_arm -->
-          <xacro:sts_position_joint name="left_arm_shoulder_pan"   id="1" lower="-3.14" upper="3.14"/>
-          <xacro:sts_position_joint name="left_arm_shoulder_lift"  id="2" lower="-1.75" upper="1.75"/>
-          <xacro:sts_position_joint name="left_arm_elbow_flex"     id="3" lower="-1.75" upper="1.75"/>
-          <xacro:sts_position_joint name="left_arm_wrist_flex"     id="4" lower="-1.75" upper="1.75"/>
-          <xacro:sts_position_joint name="left_arm_wrist_roll"     id="5" lower="-3.14" upper="3.14"/>
-          <xacro:sts_position_joint name="left_arm_gripper"        id="6" lower="0.0"   upper="1.75"/>
+          <xacro:sts_arm_joints prefix="left_arm"/>
         </xacro:if>
 
         <xacro:if value="${with_head}">
@@ -101,12 +105,7 @@
       </hardware>
 
       <xacro:if value="${with_arms}">
-        <xacro:sts_position_joint name="right_arm_shoulder_pan"  id="1" lower="-3.14" upper="3.14"/>
-        <xacro:sts_position_joint name="right_arm_shoulder_lift" id="2" lower="-1.75" upper="1.75"/>
-        <xacro:sts_position_joint name="right_arm_elbow_flex"    id="3" lower="-1.75" upper="1.75"/>
-        <xacro:sts_position_joint name="right_arm_wrist_flex"    id="4" lower="-1.75" upper="1.75"/>
-        <xacro:sts_position_joint name="right_arm_wrist_roll"    id="5" lower="-3.14" upper="3.14"/>
-        <xacro:sts_position_joint name="right_arm_gripper"       id="6" lower="0.0"   upper="1.75"/>
+        <xacro:sts_arm_joints prefix="right_arm"/>
       </xacro:if>
 
       <!-- The RIGHT motor is mounted mirrored (confirmed on the real robot by

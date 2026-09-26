@@ -8,6 +8,28 @@
   <xacro:macro name="xlerobot_head" params="dims parent">
     <xacro:property name="h" value="${dims['head']}"/>
 
+    <!-- Mast from the cart top plate up to the pan servo, a placeholder rod so the
+         head does not float. TODO swap for topbase1/2.stl. -->
+    <xacro:property name="mast_bottom" value="${dims['base']['body_height'] - 0.005}"/>
+    <xacro:property name="mast_length" value="${h['mount_z'] - 0.02 - mast_bottom}"/>
+    <link name="head_mast_link">
+      <visual>
+        <origin xyz="0 0 ${mast_length / 2.0}" rpy="0 0 0"/>
+        <geometry><cylinder radius="0.02" length="${mast_length}"/></geometry>
+        <material name="xle_accent"/>
+      </visual>
+      <inertial>
+        <origin xyz="0 0 ${mast_length / 2.0}" rpy="0 0 0"/>
+        <mass value="0.1"/>
+        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-5"/>
+      </inertial>
+    </link>
+    <joint name="head_mast_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child  link="head_mast_link"/>
+      <origin xyz="${h['mount_x']} ${h['mount_y']} ${mast_bottom}" rpy="0 0 0"/>
+    </joint>
+
     <link name="head_pan_link">
       <visual>
         <geometry><cylinder radius="0.035" length="0.04"/></geometry>

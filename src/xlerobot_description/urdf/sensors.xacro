@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!--
   Sensor mount is sensor agnostic on purpose, see ADR-0003, the choice isn't
-  made yet. sensor arg picks one of: none, vlp16, gemini, realsense.
+  made yet. sensor arg picks one of: none, usbcam, vlp16, gemini, realsense.
   Head mount frame is head_camera_mount, from head_pantilt.xacro.
   Lidar mount point is a placeholder until we know where it actually goes,
   might not even be on the head.
@@ -9,6 +9,34 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <xacro:macro name="xlerobot_sensors" params="sensor dims">
+
+    <!-- The head camera the robot has today: a plain USB webcam, the same model
+         as the wrist cameras (bringup cameras:=true, config/cameras.yaml). Body
+         size and pose on the head are approximate, not measured. -->
+    <xacro:if value="${sensor == 'usbcam'}">
+      <link name="head_camera_link">
+        <visual>
+          <geometry><box size="0.02 0.05 0.03"/></geometry>
+          <material name="xle_black"/>
+        </visual>
+        <inertial>
+          <mass value="0.03"/>
+          <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+        </inertial>
+      </link>
+      <joint name="head_camera_joint" type="fixed">
+        <parent link="head_camera_mount"/>
+        <child  link="head_camera_link"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+      </joint>
+      <!-- REP-103 optical frame, z forward -->
+      <link name="head_camera_optical_frame"/>
+      <joint name="head_camera_optical_joint" type="fixed">
+        <parent link="head_camera_link"/>
+        <child  link="head_camera_optical_frame"/>
+        <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
+      </joint>
+    </xacro:if>
 
     <xacro:if value="${sensor == 'realsense'}">
       <link name="head_camera_link">
