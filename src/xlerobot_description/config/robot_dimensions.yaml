@@ -86,8 +86,10 @@ xlerobot:
 
   # --- head pan/tilt, IDs 7 and 8 on bus1 ---
   head:
-    # pan servo axis in base_link, from upstream XLeRobot's reference URDF (head on a
-    # mast about 0.28 m above the cart top). TODO measure on this robot.
+    # pan servo axis in base_link, from simulation/xlerobot/xlerobot.urdf in the
+    # XLeRobot repo (xlerobot_urdf.zip, head on a mast about 0.28 m above the cart
+    # top). Approximate: that URDF's drivetrain is the stock cart's, not the 0.4.0
+    # dual-wheel base. The 0.4.0 CAD is hardware/step/XLeRobot_040. TODO measure.
     mount_x: 0.047
     mount_y: 0.0
     mount_z: 1.053
@@ -97,11 +99,14 @@ xlerobot:
     tilt_limit_upper:  0.79
 
   # --- arms, two SO-101 on the cart top, IDs 1-6 (left on bus1, right on bus2) ---
-  # Where each arm's base_link sits, left is +y, right is -y. Taken from upstream
-  # XLeRobot's reference URDF: shoulder pan axes at x=0.06, y=+-0.155, arm base on
-  # the cart top plate (z=0.775). The SO-101 base_link origin is 0.0388 behind its
-  # pan axis, hence mount_x. Zero pose points forward. TODO measure on this robot,
-  # and check pan zero against the servo calibration.
+  # Where each arm's base_link sits, left is +y, right is -y. Taken from
+  # simulation/xlerobot/xlerobot.urdf in the XLeRobot repo (xlerobot_urdf.zip):
+  # shoulder pan axes at x=0.06, y=+-0.155, arm base on the cart top plate
+  # (z=0.775). Approximate, that URDF's drivetrain is the stock cart's, not the
+  # 0.4.0 dual-wheel base, and the 0.4.0 arm base can be mounted in other
+  # directions. The SO-101 base_link origin is 0.0388 behind its pan axis, hence
+  # mount_x. Zero pose points forward. TODO measure on this robot, and check pan
+  # zero against the servo calibration.
   arms:
     mount_x: 0.0212
     mount_y: 0.155
