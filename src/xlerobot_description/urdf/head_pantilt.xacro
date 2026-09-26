@@ -87,8 +87,8 @@
       <parent link="top_base_link"/>
       <child link="head_pan_link"/>
       <origin xyz="-0.103 0 ${pan_dz}" rpy="0 0 0"/>
-      <axis xyz="0 0 1"/>
-      <limit lower="${h['pan_limit_lower']}" upper="${h['pan_limit_upper']}" effort="2.0" velocity="3.0"/>
+      <axis xyz="0 0 ${-h['pan_direction']}"/>
+      <limit lower="${min(-h['pan_direction'] * h['pan_limit_lower'], -h['pan_direction'] * h['pan_limit_upper'])}" upper="${max(-h['pan_direction'] * h['pan_limit_lower'], -h['pan_direction'] * h['pan_limit_upper'])}" effort="2.0" velocity="3.0"/>
     </joint>
 
     <link name="head_tilt_link">
@@ -121,8 +121,8 @@
       <parent link="head_pan_link"/>
       <child link="head_tilt_link"/>
       <origin xyz="0.001 0.002 0.09815" rpy="0 0 3.1415927"/>
-      <axis xyz="0 1 0"/>
-      <limit lower="${h['tilt_limit_lower']}" upper="${h['tilt_limit_upper']}" effort="2.0" velocity="3.0"/>
+      <axis xyz="0 ${-h['tilt_direction']} 0"/>
+      <limit lower="${min(-h['tilt_direction'] * h['tilt_limit_lower'], -h['tilt_direction'] * h['tilt_limit_upper'])}" upper="${max(-h['tilt_direction'] * h['tilt_limit_lower'], -h['tilt_direction'] * h['tilt_limit_upper'])}" effort="2.0" velocity="3.0"/>
     </joint>
 
     <!-- sensor gets attached here, in sensors.xacro -->

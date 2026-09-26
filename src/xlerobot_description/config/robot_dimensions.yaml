@@ -111,6 +111,14 @@ xlerobot:
     pan_limit_upper:  3.2
     tilt_limit_lower: -0.76
     tilt_limit_upper:  1.45
+    # Servo calibration is tools/calibrate_arm.py --arm head, the head looking straight ahead
+    # and level is step 2047, and that is the model's zero. direction: +1 if the servo step
+    # increases with the joint angle, -1 if it decreases (what the driver reports natively,
+    # see the arms below). Not checked against the real head yet, TODO.
+    pan_zero_step: 2047
+    pan_direction: -1
+    tilt_zero_step: 2047
+    tilt_direction: -1
 
   # --- arms, two SO-101 on the cart top, IDs 1-6 (left on bus1, right on bus2) ---
   # The arm meshes, links and joints are those in simulation/xlerobot/xlerobot.urdf
@@ -132,6 +140,26 @@ xlerobot:
     mount_z: 0.765
     right_yaw: -1.57079633
     left_yaw: -1.57079633
+
+    # The SO-101 joints, the same for both arms. lower/upper are the limits of the shared
+    # upstream URDF, in its joint direction. The servos are calibrated with
+    # tools/calibrate_arm.py (lerobot's procedure), which makes step 2047 the middle of
+    # each joint's range, and these two numbers say how the model's joints relate to that:
+    # zero_step: the servo step where the model's joint angle is 0 (arm stretched straight).
+    # direction: +1 if the servo step increases with the upstream joint angle, -1 if it
+    #   decreases. The driver reports (center - step), so -1 is its own direction, and for
+    #   +1 so101_arm.xacro reverses the joint axis and mirrors the limits, which gives the
+    #   same pose. Both are first estimates from the end stops swept during calibration
+    #   (accurate to a few degrees, the folded rest pose only fits lift -1 and elbow +1) and
+    #   the direction of pan, wrist flex, wrist roll and gripper is a guess. TODO check each
+    #   joint by moving it by hand in Rerun, and the zero pose with the arm stretched out.
+    joints:
+      shoulder_pan:  {zero_step: 2047, direction:  1, lower: -2.16,       upper: 2.16}
+      shoulder_lift: {zero_step: 3078, direction: -1, lower: -0.22,       upper: 3.37}
+      elbow_flex:    {zero_step: 1042, direction:  1, lower: -0.22,       upper: 3.14}
+      wrist_flex:    {zero_step: 2011, direction:  1, lower: -1.6580628,  upper: 1.6580627}
+      wrist_roll:    {zero_step: 2047, direction: -1, lower: -2.7438473,  upper: 2.8412063}
+      gripper:       {zero_step: 1775, direction:  1, lower: -0.374533,   upper: 1.7453292}
 
   # --- LD19 2D lidar, upside down under the second basket ---
   # x, y: measured, centred and in line with the drive axle, base_link frame (front is +x).

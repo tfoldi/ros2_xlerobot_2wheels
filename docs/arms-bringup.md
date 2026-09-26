@@ -42,12 +42,19 @@ one starts.
      on bus 1) with the head looking straight ahead and level as the middle, file
      `xlerobot_head.json` (lerobot has no robot type for the head, so it sits in
      `robots/xlerobot_head/`). The model's head zero is that same pose, so no extra offset.
-   - *Model zero.* The calibrated middle is not the model's zero (arm stretched straight). Put
-     each arm in the zero pose, read the steps with `status`, and store the difference to the
-     middle per joint in `robot_dimensions.yaml`. `xlerobot.ros2_control.xacro` then loads the
-     lerobot file and sets each joint's `position_center_steps` and limits from it. The
-     interface has a `one_key_calibration` service that changes the servo's stored midpoint,
-     it is a maintenance tool and not used here.
+   - *Model zero and direction.* The calibrated middle (step 2047) is not the model's zero
+     (arm stretched straight), and a servo may turn the other way from the model's joint.
+     `arms.joints` in `robot_dimensions.yaml` holds both per joint: `zero_step`, the step
+     where the model reads 0, and `direction`. `xlerobot.ros2_control.xacro` passes the
+     zero as `position_center_steps`, and where the direction differs from the driver's,
+     `so101_arm.xacro` reverses the joint axis and mirrors the limits. The values are first
+     estimates from the calibration end stops, to be refined with the arm stretched straight:
+     read the steps with `status` and set `zero_step`. The head is the same with
+     `head.pan_zero_step` and `head.pan_direction` (and tilt).
+     The interface has a `one_key_calibration` service that changes the servo's stored
+     midpoint, it is a maintenance tool and not used here.
+   - *Backup.* `docs/calibration-examples/` has the files of this robot as examples. The
+     calibration itself is not part of the repo, every robot has its own.
    Done when: moving a joint by hand moves the same joint the same way in Rerun, and both
    arms read zero within about 2 degrees in the zero pose.
 3. **Model in Rerun.** With real joint states the arms show in the Rerun view as the robot

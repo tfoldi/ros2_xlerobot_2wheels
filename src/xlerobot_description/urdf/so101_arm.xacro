@@ -7,7 +7,9 @@
   origins, axes, limits and inertials. The zero pose is that URDF's, the arm
   stretched straight out to the side, and it folds by about +3 rad at the shoulder
   lift and elbow, which is how the real arms rest. Only the joint velocity limit
-  changed, the source has 0, 3 rad/s here so planners get a usable limit.
+  changed, the source has 0, 3 rad/s here so planners get a usable limit. Joint axes and
+  limits follow arms.joints in robot_dimensions.yaml: where the real servo goes the other
+  way from the source's angle the axis is reversed and the limits mirrored.
 
   Frame names follow the ros2_control joints and the sim, not upstream's
   (upstream calls the arm on the right side *_L). The wrist camera is upstream's
@@ -19,7 +21,29 @@
   wrist_camera:=false leaves out the camera links.
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-  <xacro:macro name="so101_arm" params="prefix parent xyz rpy wrist_camera:=true">
+  <xacro:macro name="so101_arm" params="prefix parent xyz rpy joints wrist_camera:=true">
+
+    <!-- joint direction, see arms.joints in robot_dimensions.yaml: m is -1 to reverse the
+         axis (and mirror the limits) where the servo step goes the same way as the joint
+         angle. Reversing axis and angle together is the same pose. -->
+    <xacro:property name="m_pan" value="${-joints['shoulder_pan']['direction']}"/>
+    <xacro:property name="lo_pan" value="${min(m_pan * joints['shoulder_pan']['lower'], m_pan * joints['shoulder_pan']['upper'])}"/>
+    <xacro:property name="hi_pan" value="${max(m_pan * joints['shoulder_pan']['lower'], m_pan * joints['shoulder_pan']['upper'])}"/>
+    <xacro:property name="m_lift" value="${-joints['shoulder_lift']['direction']}"/>
+    <xacro:property name="lo_lift" value="${min(m_lift * joints['shoulder_lift']['lower'], m_lift * joints['shoulder_lift']['upper'])}"/>
+    <xacro:property name="hi_lift" value="${max(m_lift * joints['shoulder_lift']['lower'], m_lift * joints['shoulder_lift']['upper'])}"/>
+    <xacro:property name="m_elbow" value="${-joints['elbow_flex']['direction']}"/>
+    <xacro:property name="lo_elbow" value="${min(m_elbow * joints['elbow_flex']['lower'], m_elbow * joints['elbow_flex']['upper'])}"/>
+    <xacro:property name="hi_elbow" value="${max(m_elbow * joints['elbow_flex']['lower'], m_elbow * joints['elbow_flex']['upper'])}"/>
+    <xacro:property name="m_wflex" value="${-joints['wrist_flex']['direction']}"/>
+    <xacro:property name="lo_wflex" value="${min(m_wflex * joints['wrist_flex']['lower'], m_wflex * joints['wrist_flex']['upper'])}"/>
+    <xacro:property name="hi_wflex" value="${max(m_wflex * joints['wrist_flex']['lower'], m_wflex * joints['wrist_flex']['upper'])}"/>
+    <xacro:property name="m_roll" value="${-joints['wrist_roll']['direction']}"/>
+    <xacro:property name="lo_roll" value="${min(m_roll * joints['wrist_roll']['lower'], m_roll * joints['wrist_roll']['upper'])}"/>
+    <xacro:property name="hi_roll" value="${max(m_roll * joints['wrist_roll']['lower'], m_roll * joints['wrist_roll']['upper'])}"/>
+    <xacro:property name="m_grip" value="${-joints['gripper']['direction']}"/>
+    <xacro:property name="lo_grip" value="${min(m_grip * joints['gripper']['lower'], m_grip * joints['gripper']['upper'])}"/>
+    <xacro:property name="hi_grip" value="${max(m_grip * joints['gripper']['lower'], m_grip * joints['gripper']['upper'])}"/>
 
     <joint name="${prefix}_mount_joint" type="fixed">
       <parent link="${parent}"/>
@@ -262,48 +286,48 @@
       <parent link="${prefix}_base_link"/>
       <child link="${prefix}_shoulder_link"/>
       <origin xyz="0 -0.0452 0.0165" rpy="1.5708 0 0"/>
-      <axis xyz="0 -1 0"/>
-      <limit lower="-2.16" upper="2.16" effort="3.35" velocity="3.0"/>
+      <axis xyz="0 ${-1 * m_pan} 0"/>
+      <limit lower="${lo_pan}" upper="${hi_pan}" effort="3.35" velocity="3.0"/>
       <dynamics damping="0.6" friction="0.052"/>
     </joint>
     <joint name="${prefix}_shoulder_lift_joint" type="revolute">
       <parent link="${prefix}_shoulder_link"/>
       <child link="${prefix}_upper_arm_link"/>
       <origin xyz="0 0.1025 0.0306" rpy="1.5708 0 0"/>
-      <axis xyz="-1 0 0"/>
-      <limit lower="-0.22" upper="3.37" effort="3.35" velocity="3.0"/>
+      <axis xyz="${-1 * m_lift} 0 0"/>
+      <limit lower="${lo_lift}" upper="${hi_lift}" effort="3.35" velocity="3.0"/>
       <dynamics damping="0.6" friction="0.052"/>
     </joint>
     <joint name="${prefix}_elbow_flex_joint" type="revolute">
       <parent link="${prefix}_upper_arm_link"/>
       <child link="${prefix}_lower_arm_link"/>
       <origin xyz="0 0.11257 0.028" rpy="-1.5708 0 0"/>
-      <axis xyz="1 0 0"/>
-      <limit lower="-0.22" upper="3.14" effort="3.35" velocity="3.0"/>
+      <axis xyz="${m_elbow} 0 0"/>
+      <limit lower="${lo_elbow}" upper="${hi_elbow}" effort="3.35" velocity="3.0"/>
       <dynamics damping="0.6" friction="0.052"/>
     </joint>
     <joint name="${prefix}_wrist_flex_joint" type="revolute">
       <parent link="${prefix}_lower_arm_link"/>
       <child link="${prefix}_wrist_link"/>
       <origin xyz="0 0.0052 0.1349" rpy="-1.5708 0 0"/>
-      <axis xyz="1 0 0"/>
-      <limit lower="-1.6580628" upper="1.6580627" effort="3.35" velocity="3.0"/>
+      <axis xyz="${m_wflex} 0 0"/>
+      <limit lower="${lo_wflex}" upper="${hi_wflex}" effort="3.35" velocity="3.0"/>
       <dynamics damping="0.6" friction="0.052"/>
     </joint>
     <joint name="${prefix}_wrist_roll_joint" type="revolute">
       <parent link="${prefix}_wrist_link"/>
       <child link="${prefix}_gripper_link"/>
       <origin xyz="0 -0.0601 0" rpy="0 1.5707927 0"/>
-      <axis xyz="0 -1 0"/>
-      <limit lower="-2.7438473" upper="2.8412063" effort="3.35" velocity="3.0"/>
+      <axis xyz="0 ${-1 * m_roll} 0"/>
+      <limit lower="${lo_roll}" upper="${hi_roll}" effort="3.35" velocity="3.0"/>
       <dynamics damping="0.6" friction="0.052"/>
     </joint>
     <joint name="${prefix}_gripper_joint" type="revolute">
       <parent link="${prefix}_gripper_link"/>
       <child link="${prefix}_moving_jaw_link"/>
       <origin xyz="-0.0202 -0.0244 0" rpy="3.1415854 -0.0000014 2.9531853"/>
-      <axis xyz="0 0 1"/>
-      <limit lower="-0.374533" upper="1.7453292" effort="10" velocity="3.0"/>
+      <axis xyz="0 0 ${m_grip}"/>
+      <limit lower="${lo_grip}" upper="${hi_grip}" effort="10" velocity="3.0"/>
       <dynamics damping="0.6" friction="0.052"/>
     </joint>
 

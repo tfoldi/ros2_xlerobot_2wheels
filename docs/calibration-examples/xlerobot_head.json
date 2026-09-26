@@ -1,0 +1,16 @@
+{
+    "head_pan": {
+        "id": 7,
+        "drive_mode": 0,
+        "homing_offset": -1680,
+        "range_min": 99,
+        "range_max": 3635
+    },
+    "head_tilt": {
+        "id": 8,
+        "drive_mode": 0,
+        "homing_offset": 1488,
+        "range_min": 1916,
+        "range_max": 2815
+    }
+}
