@@ -40,7 +40,7 @@ def _camera_nodes(context, *args, **kwargs):
                 "framerate": float(cfg["fps"]),
                 "pixel_format": cfg["pixel_format"],
                 "camera_name": name,
-                "camera_frame_id": f"{name}_camera_optical_frame",
+                "camera_frame_id": cfg.get("frame_id", f"{name}_camera_optical_frame"),
                 "camera_info_url": "",
                 "image_raw.ffmpeg.encoder": cfg["encoder"],
                 "image_raw.ffmpeg.encoder_av_options": cfg["encoder_options"],

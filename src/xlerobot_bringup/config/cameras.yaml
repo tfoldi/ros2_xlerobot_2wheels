@@ -19,10 +19,15 @@ defaults:
   bit_rate: 2000000
   gop_size: 30
 
+# frame_id is the camera's optical frame in the URDF (head from sensors.xacro, the
+# wrist ones from so101_arm.xacro), so the video can be placed in the robot.
 cameras:
   head:
     device: /dev/xle-cam-head
+    frame_id: head_camera_optical_frame
   left:
     device: /dev/xle-cam-left
+    frame_id: left_arm_wrist_camera_optical_frame
   right:
     device: /dev/xle-cam-right
+    frame_id: right_arm_wrist_camera_optical_frame
