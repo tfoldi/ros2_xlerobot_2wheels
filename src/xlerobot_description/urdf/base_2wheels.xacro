@@ -132,7 +132,12 @@
     </joint>
 
     <link name="body_link">
-      <!-- raskogbody.stl, from upstream's own Isaac Sim asset bundle
+      <!-- Scaled 0.868 along the robot's length (x) from upstream's 0.0009 so the top
+           basket is 282 mm front rim to rear rim, as measured on the robot, upstream's
+           mesh has 325 mm. Front rim 22 mm ahead of the drive axle line, rear rim 260 mm
+           behind it, measured. Width and height are still upstream's scale. The rest of
+           this comment is about upstream's placement.
+           raskogbody.stl, from upstream's own Isaac Sim asset bundle
            (Apache-2.0, simulation/Isaac_sim/xlerobot.zip), same IKEA RASKOG
            cart this robot is built on. The offset here is derived, not
            measured: upstream's reference URDF places this mesh at
@@ -151,10 +156,10 @@
            including them would draw a second, wrong-width pair of wheels
            overlapping the real ones modeled below. -->
       <visual>
-        <origin xyz="0.13332 0.502 0.895" rpy="${pi/2} 0 0"/>
+        <origin xyz="0.10583 0.502 0.895" rpy="${pi/2} 0 0"/>
         <geometry>
           <mesh filename="package://xlerobot_description/meshes/raskogbody.stl"
-                scale="0.0009 0.001 0.0009"/>
+                scale="0.000781 0.001 0.0009"/>
         </geometry>
         <material name="xle_grey"/>
       </visual>

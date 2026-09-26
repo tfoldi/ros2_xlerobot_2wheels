@@ -127,7 +127,7 @@
       <parent link="head_tilt_link"/>
       <child link="head_camera_mount"/>
       <!-- z puts the lens centre at head: camera_z above the floor -->
-      <origin xyz="0.025 0 ${h['camera_z'] - pan_z - 0.09815}" rpy="0 0 0"/>
+      <origin xyz="${h['camera_x']} 0 ${h['camera_z'] - pan_z - 0.09815}" rpy="0 0 0"/>
     </joint>
   </xacro:macro>
 </robot>

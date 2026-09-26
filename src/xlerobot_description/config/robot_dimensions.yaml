@@ -30,13 +30,13 @@ xlerobot:
     # build. width corrected from upstream's own chassis collision boxes
     # (0.405-0.459m depending which cross-section) - the old 0.350 guess was
     # narrower than the actual cart.
-    body_length: 0.450
+    body_length: 0.340
     body_width:  0.405
     body_height: 0.780
     # x of the body box centre in base_link (drive axle is x=0), matched to the
     # centre of raskogbody.stl's footprint (x=-0.048 to 0.344). TODO check
     # against the real cart's front and rear edges.
-    body_x_offset: 0.148
+    body_x_offset: 0.119
 
     # axle height above floor. Measured 62.5mm, same as wheel_radius - the
     # mount is not recessed.
@@ -52,12 +52,12 @@ xlerobot:
     # Diameter measured 55mm.
     caster_radius: 0.0275
     # base_link frame, front is +x (the drive-wheel end, where the arms and the
-    # head camera face). The cart body mesh spans x=-0.345 to x=0.048 (drive axle
-    # is x=0), the casters sit just inside its ends. Not measured against the real
+    # head camera face). The cart body mesh spans x=-0.289 to x=0.052 (drive axle
+    # is x=0), the casters sit just inside its ends, scaled with the mesh. Not measured against the real
     # robot's actual leg positions, just checked to not float in visibly empty
     # space, and taken from the shared upstream URDF's cart placement.
-    caster_rear_x_offset: -0.31
-    caster_front_x_offset: 0.04
+    caster_rear_x_offset: -0.259
+    caster_front_x_offset: 0.045
     # TODO measure. Estimated from the corrected body_width (0.405m), not
     # measured directly - casters sit near the corners, inset a bit from
     # the body edge. Same value used for front and rear pairs.
@@ -89,21 +89,22 @@ xlerobot:
     # degrees about z, front is -x), the frame of the shared upstream URDF. The neck
     # and head parts are the ones in simulation/xlerobot/xlerobot.urdf of the
     # XLeRobot repo (xlerobot_urdf.zip).
-    # x: measured, the mast axis is 70 mm from the front rim of the top basket, the
-    #    one nearest the drive wheels, that rim is at x=-0.014 in the cart mesh, so
-    #    0.056 (5.6 cm behind the axle line in base_link). The cart mesh position
-    #    relative to the drive axle comes from that URDF and is not measured, so x
-    #    is right relative to the cart, not yet to the wheels.
+    # x: measured, the mast axis is 70 mm behind the front rim of the top basket and
+    #    the front rim is 22 mm ahead of the drive axle line, so the axis is 48 mm behind
+    #    the axle line (0.048 here, the body frame has the front at -x).
     # z: measured, floor to the top of the pan servo where its axis meets the printed
     #    part, 1.118 m. In the upstream head meshes that junction is 0.073 m above the
     #    pan joint origin, which puts the origin 0.325 m above the top base, upstream
     #    has 0.323, so the neck matches upstream's (see head_pantilt.xacro).
+    # camera_x: measured, the lens centre is 65 mm behind the front rim, 5 mm ahead of the
+    #    pan axis (tilt frame, see head_pantilt.xacro).
     # camera_z: measured, floor to the head camera lens centre, 1.183 m, upstream's
     #    camera position gives 1.173. It is a plain USB camera, not the depth camera
     #    that URDF's head is made for.
-    mount_x: 0.056
+    mount_x: 0.048
     mount_y: 0.0
     mount_z: 1.118
+    camera_x: 0.004             # m in the tilt frame, upstream has 0.025
     camera_z: 1.183
     # that URDF's limits, TODO check against the mechanical stops
     pan_limit_lower: -3.2       # rad
@@ -126,7 +127,7 @@ xlerobot:
   #   shared URDF has the arms sideways (right 0, left 3.14159), the real robot has
   #   both pointing forward (official assembly video, confirmed by the user).
   arms:
-    mount_x: 0.056
+    mount_x: 0.048
     mount_y: 0.1365
     mount_z: 0.765
     right_yaw: -1.57079633
