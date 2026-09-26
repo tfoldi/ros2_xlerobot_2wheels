@@ -26,6 +26,8 @@
   <!-- none | usbcam | vlp16 | gemini | realsense, see ADR-0003. usbcam is the head
        camera the robot has today. -->
   <xacro:arg name="sensor"            default="usbcam"/>
+  <!-- none | ld19, the 2D lidar under the second basket -->
+  <xacro:arg name="lidar"             default="ld19"/>
   <!-- arms are phase 3, description only for now -->
   <xacro:arg name="with_arms"         default="false"/>
   <!-- head pan/tilt (bus1, motor_id 7/8) is phase 3 too - not wired on the
@@ -41,10 +43,14 @@
   <xacro:include filename="$(find xlerobot_description)/urdf/base_2wheels.xacro"/>
   <xacro:include filename="$(find xlerobot_description)/urdf/head_pantilt.xacro"/>
   <xacro:include filename="$(find xlerobot_description)/urdf/sensors.xacro"/>
+  <xacro:include filename="$(find xlerobot_description)/urdf/lidar.xacro"/>
 
   <xacro:xlerobot_base dims="${dims}"/>
-  <xacro:xlerobot_head dims="${dims}" parent="body_link"/>
+  <xacro:xlerobot_head dims="${dims}" parent="body_link" sensor="$(arg sensor)"/>
   <xacro:xlerobot_sensors sensor="$(arg sensor)" dims="${dims}"/>
+  <xacro:if value="${'$(arg lidar)' == 'ld19'}">
+    <xacro:xlerobot_lidar dims="${dims}" parent="base_link"/>
+  </xacro:if>
 
   <xacro:if value="$(arg with_arms)">
     <xacro:include filename="$(find xlerobot_description)/urdf/so101_arm.xacro"/>
