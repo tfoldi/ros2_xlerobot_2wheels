@@ -479,6 +479,25 @@ Done when: phase 2 and 3 parity on the Jetson.
 policies and dataset recording work over ROS topics. Follow huggingface/lerobot#4368
 conventions instead of a custom bridge.
 
+**Phase 6, the room in simulation (later).** A reconstruction of the mapped room for the
+Isaac Sim twin ([sim-twin](docs/sim-twin.md)), so the simulated robot works in the room
+the real one does. Rendered as an NVIDIA NuRec Gaussian splat scene in Omniverse.
+- **Geometry from mapping.** Walls and obstacles come from the saved `slam_toolbox` map (the
+  occupied cells, extruded from the lidar plane) and the floor is the ground plane. The map
+  frame starts at the robot's start mark, so the scene lines up with the map with no
+  extra alignment. Splats are not collidable, this simple geometry is what the physics and
+  the simulated lidar see.
+- **Appearance from camera views.** Splats are trained from the head and wrist camera video
+  recorded during mapping runs (the H.264 streams in the rosbag), with each frame's pose
+  from the SLAM `map` to camera TF and the metric scale from the lidar map.
+- **Needs first:** calibrated cameras (intrinsics, lens distortion, the fixed transforms
+  are in the URDF), timestamps that line up with TF, and enough camera coverage of the
+  room, which the fixed head camera and the arm cameras give little of.
+- **Open:** how well a splat trained on this low resolution USB video renders, and which
+  parts of the NuRec pipeline run on the workstation GPU rather than the Orin.
+Done when: the simulated robot localises and navigates in the reconstructed room with the
+same map.
+
 Phases 1 and 2 are the commitment. The rest depends on what phase 1 finds.
 
 ---
