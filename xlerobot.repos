@@ -2,7 +2,9 @@
 # Not vendored in src/ directly since these are third-party and change on
 # their own schedule. See ARCHITECTURE §3 for why each one is here.
 #
-#   vcs import src < xlerobot.repos
+#   vcs import --recursive src < xlerobot.repos
+#
+# --recursive is needed for ldrobot_lidar_ros2, its LDROBOT SDK is a git submodule.
 #
 repositories:
   sts_hardware_interface:
@@ -34,3 +36,11 @@ repositories:
     # option specifically because "Isaac Sim only reports joint states from 2*pi to -2*pi",
     # i.e. it wraps too, just differently from the real STS3215 encoder. See ARCHITECTURE
     # §4.1 and docs/sim-twin.md.
+
+  ldrobot_lidar_ros2:
+    type: git
+    url: https://github.com/Myzhar/ldrobot-lidar-ros2.git
+    version: 4ee53a8b176037cf418a54b25007075bb2b1d3a0
+    # LDROBOT LD19 2D lidar driver, a lifecycle node publishing /ldlidar_node/scan.
+    # Builds on Jazzy as is. LDROBOT's own driver (ldrobotSensorTeam/ldlidar_stl_ros2) does
+    # not build on Jazzy, it lacks an include GCC 13 needs. Apache-2.0.
