@@ -138,11 +138,11 @@ xlerobot:
   # mount_z: measured, floor to the housing's mounting surface, 0.420 m.
   # scan_below_mount: measured, the scan plane is 0.033 m from the mounting surface,
   #   so 0.387 m above the floor.
-  # yaw: rotation of the lidar about z, base_link frame. 0 until the scan front is checked
-  #   on the robot.
+  # yaw: rotation of the lidar about z, base_link frame, counter-clockwise seen from above.
+  #   Checked in the Rerun scan view on the robot.
   lidar:
     x: 0.0
     y: 0.0
     mount_z: 0.420
     scan_below_mount: 0.033
-    yaw: 0.0
+    yaw: 1.5707963
