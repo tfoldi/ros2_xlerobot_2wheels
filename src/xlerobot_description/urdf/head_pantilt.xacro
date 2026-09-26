@@ -1,81 +1,115 @@
 <?xml version="1.0"?>
 <!--
-  Head pan/tilt, IDs 7 and 8 on bus1. Frame names kept the same as upstream so
-  code written against their URDF still works.
-  TODO swap the boxes for topbase1/2.stl and tophead3/4.stl.
+  Neck and head pan/tilt, IDs 7 and 8 on bus1.
+
+  Converted from simulation/xlerobot/xlerobot.urdf of the XLeRobot repo
+  (xlerobot_urdf.zip): the printed top base, neck and head meshes
+  (meshes/upstream), link frames, joint origins and axes. The pan axis position
+  in base_link comes from robot_dimensions.yaml (head: mount_x/y/z), the top base
+  and everything above it follows from that. The head tilt link is turned 180
+  degrees about z, as in upstream, so its x axis points backwards; the camera
+  mount frame accounts for that. Pan/tilt limits are upstream's, TODO check them
+  against the mechanical stops.
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:macro name="xlerobot_head" params="dims parent">
     <xacro:property name="h" value="${dims['head']}"/>
 
-    <!-- Mast from the cart top plate up to the pan servo, a placeholder rod so the
-         head does not float. TODO swap for topbase1/2.stl. -->
-    <xacro:property name="mast_bottom" value="${dims['base']['body_height'] - 0.005}"/>
-    <xacro:property name="mast_length" value="${h['mount_z'] - 0.02 - mast_bottom}"/>
-    <link name="head_mast_link">
-      <visual>
-        <origin xyz="0 0 ${mast_length / 2.0}" rpy="0 0 0"/>
-        <geometry><cylinder radius="0.02" length="${mast_length}"/></geometry>
-        <material name="xle_accent"/>
-      </visual>
-      <inertial>
-        <origin xyz="0 0 ${mast_length / 2.0}" rpy="0 0 0"/>
-        <mass value="0.1"/>
-        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-5"/>
-      </inertial>
-    </link>
-    <joint name="head_mast_joint" type="fixed">
+    <!-- top base sits 0.323 m below and 0.103 m ahead of the pan axis -->
+    <joint name="top_base_joint" type="fixed">
       <parent link="${parent}"/>
-      <child  link="head_mast_link"/>
-      <origin xyz="${h['mount_x']} ${h['mount_y']} ${mast_bottom}" rpy="0 0 0"/>
+      <child link="top_base_link"/>
+      <origin xyz="${h['mount_x'] + 0.103} ${h['mount_y']} ${h['mount_z'] - 0.323}" rpy="0 0 0"/>
     </joint>
 
-    <link name="head_pan_link">
-      <visual>
-        <geometry><cylinder radius="0.035" length="0.04"/></geometry>
-        <material name="xle_accent"/>
-      </visual>
+    <link name="top_base_link">
       <inertial>
-        <mass value="0.1"/>
-        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.2542"/>
+        <inertia ixx="0.0045" ixy="0" ixz="0" iyy="0.005" iyz="0" izz="0.0045"/>
       </inertial>
+      <visual>
+        <origin xyz="-0.44 -0.005 -0.6" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://xlerobot_description/meshes/upstream/topbase1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="xle_part"/>
+      </visual>
+      <visual>
+        <origin xyz="-0.298 0.006 -0.715" rpy="0 0 3.14"/>
+        <geometry>
+          <mesh filename="package://xlerobot_description/meshes/upstream/topbase2.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="xle_motor"/>
+      </visual>
+    </link>
+
+    <link name="head_pan_link">
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.2556"/>
+        <inertia ixx="0.0129" ixy="0" ixz="0" iyy="0.0095" iyz="0" izz="0.0184"/>
+      </inertial>
+      <visual>
+        <origin xyz="-0.335 -0.005 -0.923" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://xlerobot_description/meshes/upstream/tophead1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="xle_part"/>
+      </visual>
+      <visual>
+        <origin xyz="1.17 -0.009 0.262" rpy="-3.141592 -1.57 -3.141592"/>
+        <geometry>
+          <mesh filename="package://xlerobot_description/meshes/upstream/tophead4.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="xle_motor"/>
+      </visual>
     </link>
 
     <joint name="head_pan_joint" type="revolute">
-      <parent link="${parent}"/>
-      <child  link="head_pan_link"/>
-      <origin xyz="${h['mount_x']} ${h['mount_y']} ${h['mount_z']}" rpy="0 0 0"/>
+      <parent link="top_base_link"/>
+      <child link="head_pan_link"/>
+      <origin xyz="-0.103 0 0.323" rpy="0 0 0"/>
       <axis xyz="0 0 1"/>
-      <limit lower="${h['pan_limit_lower']}" upper="${h['pan_limit_upper']}"
-             effort="2.0" velocity="3.0"/>
+      <limit lower="${h['pan_limit_lower']}" upper="${h['pan_limit_upper']}" effort="2.0" velocity="3.0"/>
     </joint>
 
     <link name="head_tilt_link">
-      <visual>
-        <geometry><box size="0.06 0.09 0.04"/></geometry>
-        <material name="xle_accent"/>
-      </visual>
       <inertial>
-        <mass value="0.1"/>
-        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.02087"/>
+        <inertia ixx="0.0061" ixy="0" ixz="0" iyy="0.0014" iyz="0" izz="0.0061"/>
       </inertial>
+      <visual>
+        <origin xyz="0.16265 -0.006 -1.16815" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://xlerobot_description/meshes/upstream/tophead5.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="xle_part"/>
+      </visual>
+      <visual>
+        <origin xyz="0.16265 -0.006 -1.16815" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://xlerobot_description/meshes/upstream/tophead6.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="xle_motor"/>
+      </visual>
     </link>
 
     <joint name="head_tilt_joint" type="revolute">
       <parent link="head_pan_link"/>
-      <child  link="head_tilt_link"/>
-      <origin xyz="0 0 0.04" rpy="0 0 0"/>
+      <child link="head_tilt_link"/>
+      <origin xyz="0.001 0.002 0.09815" rpy="0 0 3.1415927"/>
       <axis xyz="0 1 0"/>
-      <limit lower="${h['tilt_limit_lower']}" upper="${h['tilt_limit_upper']}"
-             effort="2.0" velocity="3.0"/>
+      <limit lower="${h['tilt_limit_lower']}" upper="${h['tilt_limit_upper']}" effort="2.0" velocity="3.0"/>
     </joint>
 
     <!-- sensor gets attached here, in sensors.xacro -->
     <link name="head_camera_mount"/>
     <joint name="head_camera_mount_joint" type="fixed">
       <parent link="head_tilt_link"/>
-      <child  link="head_camera_mount"/>
-      <origin xyz="0.03 0 0" rpy="0 0 0"/>
+      <child link="head_camera_mount"/>
+      <origin xyz="0.025 0 0.03" rpy="0 0 0"/>
     </joint>
   </xacro:macro>
 </robot>

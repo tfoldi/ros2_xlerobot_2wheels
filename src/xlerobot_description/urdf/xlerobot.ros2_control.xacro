@@ -50,15 +50,15 @@
     </joint>
   </xacro:macro>
 
-  <!-- The six SO-101 joints of one arm, IDs 1-6. Names match so101_arm.xacro,
-       limits are the SO-101 model's (so_arm_description). -->
+  <!-- The six joints of one arm, IDs 1-6. Names and limits match so101_arm.xacro,
+       which has the limits of the arm in upstream's URDF. -->
   <xacro:macro name="sts_arm_joints" params="prefix">
-    <xacro:sts_position_joint name="${prefix}_shoulder_pan_joint"  id="1" lower="-1.91986" upper="1.91986"/>
-    <xacro:sts_position_joint name="${prefix}_shoulder_lift_joint" id="2" lower="-1.74533" upper="1.74533"/>
-    <xacro:sts_position_joint name="${prefix}_elbow_flex_joint"    id="3" lower="-1.69"    upper="1.69"/>
-    <xacro:sts_position_joint name="${prefix}_wrist_flex_joint"    id="4" lower="-1.65806" upper="1.65806"/>
-    <xacro:sts_position_joint name="${prefix}_wrist_roll_joint"    id="5" lower="-2.74385" upper="2.84121"/>
-    <xacro:sts_position_joint name="${prefix}_gripper_joint"       id="6" lower="-1.74533" upper="0.174533"/>
+    <xacro:sts_position_joint name="${prefix}_shoulder_pan_joint"  id="1" lower="-2.16"      upper="2.16"/>
+    <xacro:sts_position_joint name="${prefix}_shoulder_lift_joint" id="2" lower="-0.22"      upper="3.37"/>
+    <xacro:sts_position_joint name="${prefix}_elbow_flex_joint"    id="3" lower="-0.22"      upper="3.14"/>
+    <xacro:sts_position_joint name="${prefix}_wrist_flex_joint"    id="4" lower="-1.6580628" upper="1.6580627"/>
+    <xacro:sts_position_joint name="${prefix}_wrist_roll_joint"    id="5" lower="-2.7438473" upper="2.8412063"/>
+    <xacro:sts_position_joint name="${prefix}_gripper_joint"       id="6" lower="-0.374533" upper="1.7453292"/>
   </xacro:macro>
 
   <xacro:macro name="xlerobot_ros2_control" params="bus1_port bus2_port use_mock_hardware with_arms with_head dims">

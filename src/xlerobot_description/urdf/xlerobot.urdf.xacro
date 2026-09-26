@@ -48,13 +48,21 @@
 
   <xacro:if value="$(arg with_arms)">
     <xacro:include filename="$(find xlerobot_description)/urdf/so101_arm.xacro"/>
-    <!-- Mount pose from robot_dimensions.yaml, not measured yet. 0.4.0 top base
-         allows different arm directions, so the yaw is a build choice. -->
+    <!-- Mount pose from robot_dimensions.yaml: where each shoulder pan axis is
+         (mount_x, +-mount_y) and each arm's yaw (left_yaw, right_yaw). The pan axis
+         is 0.0452 m to the side of the arm's base_link in the base's own frame, so
+         the base origin moves with the yaw to keep the axis where it is. Upstream
+         mounts the right arm (y<0) with yaw 0 and the left one turned 180 degrees,
+         both stretch out sideways at zero. The 0.4.0 top base allows other
+         directions, so the yaws are a build choice. -->
     <xacro:property name="a" value="${dims['arms']}"/>
+    <xacro:property name="pan_off" value="0.0452"/>
     <xacro:so101_arm prefix="left_arm"  parent="base_link"
-        xyz="${a['mount_x']}  ${a['mount_y']} ${a['mount_z']}" rpy="0 0 ${a['mount_yaw']}"/>
+        xyz="${a['mount_x'] - pan_off * sin(a['left_yaw'])}  ${a['mount_y'] + pan_off * cos(a['left_yaw'])} ${a['mount_z']}"
+        rpy="0 0 ${a['left_yaw']}"/>
     <xacro:so101_arm prefix="right_arm" parent="base_link"
-        xyz="${a['mount_x']} ${-a['mount_y']} ${a['mount_z']}" rpy="0 0 ${a['mount_yaw']}"/>
+        xyz="${a['mount_x'] - pan_off * sin(a['right_yaw'])} ${-a['mount_y'] + pan_off * cos(a['right_yaw'])} ${a['mount_z']}"
+        rpy="0 0 ${a['right_yaw']}"/>
   </xacro:if>
 
   <xacro:if value="$(arg use_ros2_control)">

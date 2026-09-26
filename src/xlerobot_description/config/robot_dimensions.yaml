@@ -86,31 +86,39 @@ xlerobot:
 
   # --- head pan/tilt, IDs 7 and 8 on bus1 ---
   head:
-    # pan servo axis in base_link.
-    # x: measured, the mast axis is 70 mm behind the front rim of the top basket.
-    #    That rim is at x=0.311 in the cart mesh, so 0.241. The cart mesh position
-    #    relative to the drive axle comes from upstream's URDF and is not measured,
-    #    so x is right relative to the cart but not yet relative to the wheels.
-    # z: from simulation/xlerobot/xlerobot.urdf in the XLeRobot repo, too low, the
-    #    real head sits on a pole well above this. TODO measure the pan axis height.
-    mount_x: 0.241
+    # pan servo axis in base_link. The neck and head parts are the ones in
+    # simulation/xlerobot/xlerobot.urdf of the XLeRobot repo (xlerobot_urdf.zip).
+    # x: measured, the mast axis is 70 mm from the rim of the top basket nearest the
+    #    drive wheels, that rim is at x=-0.014 in the cart mesh, so 0.056. The cart
+    #    mesh position relative to the drive axle comes from that URDF and is not
+    #    measured, so x is right relative to the cart, not yet to the wheels.
+    # z: that URDF's value, TODO measure the pan axis height on the robot.
+    mount_x: 0.056
     mount_y: 0.0
     mount_z: 1.053
-    pan_limit_lower: -2.09      # rad, TODO check against the mechanical stops
-    pan_limit_upper:  2.09
-    tilt_limit_lower: -0.79
-    tilt_limit_upper:  0.79
+    # that URDF's limits, TODO check against the mechanical stops
+    pan_limit_lower: -3.2       # rad
+    pan_limit_upper:  3.2
+    tilt_limit_lower: -0.76
+    tilt_limit_upper:  1.45
 
   # --- arms, two SO-101 on the cart top, IDs 1-6 (left on bus1, right on bus2) ---
-  # Where each arm's base_link sits, left is +y, right is -y. The shoulder pan axes
-  # are at the mast's x (0.4.0 CAD, hardware/step/XLeRobot_040/XLeRobot040_armbase.step)
-  # and 273 mm apart (CAD, confirmed on the robot), so y=+-0.1365. The SO-101
-  # base_link origin is 0.0388 behind its pan axis, hence mount_x = head x - 0.0388.
-  # z is the cart top plate from simulation/xlerobot/xlerobot.urdf in the XLeRobot
-  # repo, not measured. Zero pose points forward, the real arms rest folded, that
-  # is a servo calibration question. TODO measure the arm mounting surface height.
+  # The arm meshes, links and joints are those in simulation/xlerobot/xlerobot.urdf
+  # of the XLeRobot repo (xlerobot_urdf.zip), zero pose stretched out to the side.
+  # Left is +y, right is -y.
+  # mount_x: the shoulder pan axes are at the mast's x (0.4.0 CAD,
+  #   hardware/step/XLeRobot_040/XLeRobot040_armbase.step).
+  # mount_y: pan axis position, 273 mm apart (CAD, confirmed on the robot). That URDF
+  #   has them 310 mm apart.
+  # mount_z: the cart top plate, that URDF's value, TODO measure on the robot.
+  # left_yaw, right_yaw: rotation of each arm base about z, the 0.4.0 arm base can be
+  #   mounted in any direction. With yaw 0 an arm stretches out to its right (-y) at
+  #   the zero pose, with 3.14159 to its left. The original URDF has right 0 and left
+  #   3.14159, both arms sideways. Both forward would be 1.5708 for both, both
+  #   backward -1.5708. TODO check which one matches how the robot is built.
   arms:
-    mount_x: 0.2022
+    mount_x: 0.056
     mount_y: 0.1365
     mount_z: 0.775
-    mount_yaw: 0.0
+    right_yaw: 0.0
+    left_yaw: 3.14159265
