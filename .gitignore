@@ -8,6 +8,7 @@ log/
 /src/sts_hardware_interface/
 /src/so_arm_ros2/
 /src/topic_based_hardware_interfaces/
+/src/ldrobot_lidar_ros2/
 
 __pycache__/
 *.pyc
