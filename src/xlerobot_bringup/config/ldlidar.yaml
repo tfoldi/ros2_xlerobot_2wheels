@@ -1,0 +1,24 @@
+# LDROBOT LD19, driver from ldrobot_lidar_ros2 (xlerobot.repos). The node publishes
+# /ldlidar_node/scan in ldlidar_link, which xlerobot_description places on the robot
+# (upside down under the second basket, so its z axis points down; TF carries that).
+/**:
+  ros__parameters:
+    general:
+      debug_mode: false
+
+    comm:
+      serial_port: '/dev/ldlidar'  # udev symlink, tools/xlerobot_setup_usb_modules.py
+      baudrate: 230400
+      timeout_msec: 1000
+
+    lidar:
+      model: 'LD19'
+      rot_verse: 'CCW'
+      units: 'M'
+      frame_id: 'ldlidar_link'
+      bins: 455  # fixed size, what slam_toolbox wants
+      range_min: 0.03
+      range_max: 12.0
+      enable_angle_crop: false
+      angle_crop_min: 90.0
+      angle_crop_max: 270.0

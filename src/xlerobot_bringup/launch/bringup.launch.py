@@ -24,6 +24,8 @@ port 8765 for live inspection from Foxglove Studio. Both off by default.
 
 cameras:=true starts the USB cameras from config/cameras.yaml, see
 cameras.launch.py. Off by default, a camera that is not connected is skipped.
+
+lidar:=true starts the LD19 (/dev/ldlidar), see lidar.launch.py. Off by default.
 """
 
 import datetime
@@ -109,6 +111,7 @@ def generate_launch_description():
     controllers_yaml = os.path.join(bringup_share, "config", "controllers.yaml")
     teleop_launch_file = os.path.join(teleop_share, "launch", "teleop.launch.py")
     cameras_launch_file = os.path.join(bringup_share, "launch", "cameras.launch.py")
+    lidar_launch_file = os.path.join(bringup_share, "launch", "lidar.launch.py")
 
     bus1_port = LaunchConfiguration("bus1_port")
     bus2_port = LaunchConfiguration("bus2_port")
@@ -120,6 +123,7 @@ def generate_launch_description():
     record = LaunchConfiguration("record")
     foxglove = LaunchConfiguration("foxglove")
     cameras = LaunchConfiguration("cameras")
+    lidar = LaunchConfiguration("lidar")
 
     # Relative to wherever `ros2 launch` is run from - this repo's own convention (see
     # tools/*.py) is always the repo root, where bags/ is gitignored.
@@ -155,6 +159,7 @@ def generate_launch_description():
         DeclareLaunchArgument("record", default_value="false"),
         DeclareLaunchArgument("foxglove", default_value="false"),
         DeclareLaunchArgument("cameras", default_value="false"),
+        DeclareLaunchArgument("lidar", default_value="false"),
 
         # Must run before the Node actions below: OpaqueFunction is resolved
         # synchronously at this point in the list, so a raised error here
@@ -192,6 +197,11 @@ def generate_launch_description():
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(cameras_launch_file),
             condition=IfCondition(cameras),
+        ),
+
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(lidar_launch_file),
+            condition=IfCondition(lidar),
         ),
 
         ExecuteProcess(

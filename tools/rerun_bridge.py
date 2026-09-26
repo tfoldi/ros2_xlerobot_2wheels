@@ -12,6 +12,10 @@ Nav2: /goal_pose (what RViz's 2D Goal Pose publishes), /plan and /local_plan
 are drawn in both views. There is no localisation yet, map -> odom is an
 identity transform, so map poses are drawn as odom poses.
 
+The LD19 scan (/ldlidar_node/scan) is drawn as points in its own frame, coloured
+by beam angle from red at scan angle 0, next to arrows for the scan's zero direction
+and the robot's front, so the mounting yaw can be checked by eye.
+
 Camera video is taken from the ffmpeg_image_transport topics
 (<camera>/image_raw/ffmpeg, H.264 or H.265 packets) and logged as an encoded
 video stream, so nothing is decoded or re-encoded here. Cameras are found
@@ -25,6 +29,7 @@ Usage (bringup already running):
 """
 
 import argparse
+import colorsys
 import math
 import os
 import signal
@@ -36,9 +41,9 @@ import rerun.blueprint as rrb
 from geometry_msgs.msg import PoseStamped, TwistStamped
 from nav_msgs.msg import Odometry, Path
 from rclpy.node import Node
-from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from rerun.blueprint.components import PlayState
-from sensor_msgs.msg import JointState
+from sensor_msgs.msg import JointState, LaserScan
 from std_msgs.msg import String
 
 try:
@@ -48,6 +53,7 @@ except ImportError:
 
 ODOM_FRAME = "odom"
 BASE_FRAME = "base_footprint"
+LIDAR_FRAME = "ldlidar_link"
 CAMERAS = ("head", "left", "right")
 FFMPEG_TYPE = "ffmpeg_image_transport_msgs/msg/FFMPEGPacket"
 AV_PKT_FLAG_KEY = 1
@@ -94,17 +100,28 @@ def blueprint(cameras):
                 rrb.Spatial3DView(
                     name="Robot", origin="/",
                     contents=[
-                        "/xlerobot/**", "/transforms/**", "/world/**",
+                        "/xlerobot/**", "/transforms/**", "/world/**", "/lidar/**",
                         "- /xlerobot/collision_geometries/**"],
                     spatial_information=rrb.SpatialInformation(target_frame=ODOM_FRAME),
                     # from the front left and above, the whole robot with both arms and the
                     # head in view, +z up
                     eye_controls=rrb.EyeControls3D(
                         position=(1.25, 0.95, 1.3), look_target=(-0.1, 0.0, 0.75), eye_up=(0.0, 0.0, 1.0))),
-                rrb.Spatial2DView(
-                    name="Odometry (top view)", origin="/odom",
-                    contents=["/odom/path", "/odom/pose", "/odom/goal", "/odom/plan"]),
-                row_shares=[3, 2],
+                rrb.Horizontal(
+                    # from above with the robot's front (+x) up, the scan is in the robot's frame
+                    rrb.Spatial3DView(
+                        name="Lidar (front up)", origin="/",
+                        contents=[
+                            "/xlerobot/**", "/transforms/**", "/lidar/**", "/world/front",
+                            "- /xlerobot/collision_geometries/**"],
+                        spatial_information=rrb.SpatialInformation(target_frame="base_link"),
+                        eye_controls=rrb.EyeControls3D(
+                            position=(0.0, 0.0, 2.6), look_target=(0.0, 0.0, 0.0), eye_up=(1.0, 0.0, 0.0))),
+                    rrb.Spatial2DView(
+                        name="Odometry (top view)", origin="/odom",
+                        contents=["/odom/path", "/odom/pose", "/odom/goal", "/odom/plan"]),
+                ),
+                row_shares=[3, 3],
             ),
             rrb.Vertical(
                 *camera_row,
@@ -123,6 +140,14 @@ def blueprint(cameras):
 def log_static_setup():
     for entity in WORLD_ENTITIES:
         rr.log(entity, rr.CoordinateFrame(ODOM_FRAME), static=True)
+    rr.log("lidar", rr.CoordinateFrame(LIDAR_FRAME), static=True)
+    rr.log("world/front", rr.CoordinateFrame("base_link"), static=True)
+    rr.log("world/front", rr.Arrows3D(
+        origins=[[0.0, 0.0, 0.0]], vectors=[[0.6, 0.0, 0.0]],
+        colors=[(255, 255, 255)], radii=0.01, labels=["robot front (+x)"]), static=True)
+    rr.log("lidar/zero", rr.Arrows3D(
+        origins=[[0.0, 0.0, 0.0]], vectors=[[0.4, 0.0, 0.0]],
+        colors=[(213, 94, 0)], radii=0.008, labels=["scan angle 0"]), static=True)
     for entity, (name, color) in VELOCITY_SERIES.items():
         rr.log(entity, rr.SeriesLines(colors=[color], names=[name], widths=[2.0]), static=True)
 
@@ -138,6 +163,7 @@ class RerunBridge(Node):
         self.create_subscription(TwistStamped, "/cmd_vel_nav", self.on_cmd_vel_nav, 20)
         self.create_subscription(JointState, "/joint_states", self.on_joint_states, 20)
         self.create_subscription(PoseStamped, "/goal_pose", self.on_goal, 10)
+        self.create_subscription(LaserScan, "/ldlidar_node/scan", self.on_scan, qos_profile_sensor_data)
         self.create_subscription(Path, "/plan", self.on_plan, 10)
         self.create_subscription(Path, "/local_plan", self.on_local_plan, 10)
         # robot_state_publisher latches the description, so match its durability.
@@ -224,6 +250,18 @@ class RerunBridge(Node):
         rr.log(
             "world/odom_path",
             rr.LineStrips3D([[(px, py, PLAN_Z) for px, py in points]], colors=[(0, 114, 178)], radii=0.01))
+
+    def on_scan(self, msg: LaserScan):
+        self.set_time(msg.header)
+        points, colors = [], []
+        n = len(msg.ranges)
+        for i, r in enumerate(msg.ranges):
+            if not (msg.range_min < r < msg.range_max):  # also drops inf and nan
+                continue
+            a = msg.angle_min + i * msg.angle_increment
+            points.append((r * math.cos(a), r * math.sin(a), 0.0))
+            colors.append(tuple(int(255 * c) for c in colorsys.hsv_to_rgb(0.8 * i / n, 1.0, 1.0)))
+        rr.log("lidar/scan", rr.Points3D(points, colors=colors, radii=0.012))
 
     def on_goal(self, msg: PoseStamped):
         self.set_time(msg.header)
