@@ -1,7 +1,8 @@
-# Wheel-odometry-only Nav2, no sensor yet (ADR-0003). No map_server/amcl - map->odom is a
-# static identity transform published by navigation.launch.py, and both costmaps are rolling
-# windows with inflation only, no obstacle layer. Real mapping/localization arrives with the
-# VLP-16 in ARCHITECTURE §5.
+# Nav2 for the XLeRobot base. Without slam:=true the map -> odom transform is a static
+# identity published by navigation.launch.py and the global costmap is a rolling window,
+# wheel odometry only. With slam:=true slam_toolbox publishes map and map -> odom and
+# nav2_slam.yaml turns the global costmap into a static map layer, see slam.launch.py.
+# The local costmap always has the LD19 obstacle layer.
 #
 # footprint is a rectangle covering the real extremities, not the (smaller) body_length x
 # body_width chassis box: wheels stick out past the basket on y, and the rear caster sticks
@@ -109,7 +110,21 @@ local_costmap:
       update_frequency: 10.0
       publish_frequency: 1.0
       footprint: "[[0.08, -0.29], [0.08, 0.29], [-0.30, 0.29], [-0.30, -0.29]]"
-      plugins: ["inflation_layer"]
+      plugins: ["obstacle_layer", "inflation_layer"]
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /ldlidar_node/scan
+          data_type: "LaserScan"
+          marking: true
+          clearing: true
+          max_obstacle_height: 2.0
+          obstacle_max_range: 4.0
+          obstacle_min_range: 0.30
+          raytrace_max_range: 5.0
+          raytrace_min_range: 0.30
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         inflation_radius: 0.3

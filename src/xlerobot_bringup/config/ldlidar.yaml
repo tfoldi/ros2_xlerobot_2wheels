@@ -17,7 +17,9 @@
       units: 'M'
       frame_id: 'ldlidar_link'
       bins: 455  # fixed size, what slam_toolbox wants
-      range_min: 0.03
+      # the cart's own posts show up at 0.21-0.27 m, at y = +-0.2 m from the lidar; everything
+      # inside 0.30 m is the robot itself, its footprint is bigger than that anyway
+      range_min: 0.30
       range_max: 12.0
       enable_angle_crop: false
       angle_crop_min: 90.0

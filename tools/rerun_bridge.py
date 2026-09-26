@@ -12,6 +12,10 @@ Nav2: /goal_pose (what RViz's 2D Goal Pose publishes), /plan and /local_plan
 are drawn in both views. There is no localisation yet, map -> odom is an
 identity transform, so map poses are drawn as odom poses.
 
+The slam_toolbox map (/map) is drawn as points in the map frame, with map -> odom from
+/tf, so the robot, the scan and the plan sit in the map as SLAM sees it. The map frame
+starts at the robot's start pose.
+
 The LD19 scan (/ldlidar_node/scan) is drawn as points in its own frame, coloured
 by beam angle from red at scan angle 0, next to arrows for the scan's zero direction
 and the robot's front, so the mounting yaw can be checked by eye.
@@ -39,12 +43,14 @@ import rclpy
 import rerun as rr
 import rerun.blueprint as rrb
 from geometry_msgs.msg import PoseStamped, TwistStamped
-from nav_msgs.msg import Odometry, Path
+import numpy as np
+from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from rerun.blueprint.components import PlayState
 from sensor_msgs.msg import JointState, LaserScan
 from std_msgs.msg import String
+from tf2_msgs.msg import TFMessage
 
 try:
     from ffmpeg_image_transport_msgs.msg import FFMPEGPacket
@@ -53,8 +59,11 @@ except ImportError:
 
 ODOM_FRAME = "odom"
 BASE_FRAME = "base_footprint"
+MAP_FRAME = "map"
 LIDAR_FRAME = "ldlidar_link"
 LIDAR_ENTITIES = ("lidar/scan", "lidar/zero")
+MAP_ENTITIES = ("world/map/occupied", "world/map/free")
+MAP_TF_PERIOD = 0.2  # s, slam_toolbox publishes map -> odom at 50 Hz
 CAMERAS = ("head", "left", "right")
 FFMPEG_TYPE = "ffmpeg_image_transport_msgs/msg/FFMPEGPacket"
 AV_PKT_FLAG_KEY = 1
@@ -118,9 +127,18 @@ def blueprint(cameras):
                         spatial_information=rrb.SpatialInformation(target_frame="base_link"),
                         eye_controls=rrb.EyeControls3D(
                             position=(0.0, 0.0, 2.6), look_target=(0.0, 0.0, 0.0), eye_up=(1.0, 0.0, 0.0))),
+                    rrb.Spatial3DView(
+                        name="Map (start heading up)", origin="/",
+                        contents=[
+                            "/xlerobot/**", "/transforms/**", "/lidar/**", "/world/**",
+                            "- /xlerobot/collision_geometries/**"],
+                        spatial_information=rrb.SpatialInformation(target_frame=MAP_FRAME),
+                        eye_controls=rrb.EyeControls3D(
+                            position=(0.0, 0.0, 8.0), look_target=(0.0, 0.0, 0.0), eye_up=(1.0, 0.0, 0.0))),
                     rrb.Spatial2DView(
                         name="Odometry (top view)", origin="/odom",
                         contents=["/odom/path", "/odom/pose", "/odom/goal", "/odom/plan"]),
+                    column_shares=[2, 3, 2],
                 ),
                 row_shares=[3, 3],
             ),
@@ -141,6 +159,8 @@ def blueprint(cameras):
 def log_static_setup():
     for entity in WORLD_ENTITIES:
         rr.log(entity, rr.CoordinateFrame(ODOM_FRAME), static=True)
+    for entity in MAP_ENTITIES:
+        rr.log(entity, rr.CoordinateFrame(MAP_FRAME), static=True)
     for entity in LIDAR_ENTITIES:
         rr.log(entity, rr.CoordinateFrame(LIDAR_FRAME), static=True)
     rr.log("world/front", rr.CoordinateFrame("base_link"), static=True)
@@ -166,6 +186,13 @@ class RerunBridge(Node):
         self.create_subscription(JointState, "/joint_states", self.on_joint_states, 20)
         self.create_subscription(PoseStamped, "/goal_pose", self.on_goal, 10)
         self.create_subscription(LaserScan, "/ldlidar_node/scan", self.on_scan, qos_profile_sensor_data)
+        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.create_subscription(OccupancyGrid, "/map", self.on_map, latched)
+        self.map_tf_time = 0.0
+        self.create_subscription(TFMessage, "/tf", lambda m: self.on_tf(m, False), QoSProfile(depth=100))
+        self.create_subscription(
+            TFMessage, "/tf_static", lambda m: self.on_tf(m, True),
+            QoSProfile(depth=100, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.create_subscription(Path, "/plan", self.on_plan, 10)
         self.create_subscription(Path, "/local_plan", self.on_local_plan, 10)
         # robot_state_publisher latches the description, so match its durability.
@@ -252,6 +279,39 @@ class RerunBridge(Node):
         rr.log(
             "world/odom_path",
             rr.LineStrips3D([[(px, py, PLAN_Z) for px, py in points]], colors=[(0, 114, 178)], radii=0.01))
+
+    def on_tf(self, msg: TFMessage, static):
+        for t in msg.transforms:
+            if t.header.frame_id != MAP_FRAME or t.child_frame_id != ODOM_FRAME:
+                continue
+            if not static:
+                now = self.get_clock().now().nanoseconds / 1e9
+                if now - self.map_tf_time < MAP_TF_PERIOD:
+                    continue
+                self.map_tf_time = now
+                self.set_time(t.header)
+            v, q = t.transform.translation, t.transform.rotation
+            rr.log(
+                "transforms/map_to_odom",
+                rr.Transform3D(
+                    translation=[v.x, v.y, v.z], rotation=rr.Quaternion(xyzw=[q.x, q.y, q.z, q.w]),
+                    parent_frame=MAP_FRAME, child_frame=ODOM_FRAME),
+                static=static)
+
+    def on_map(self, msg: OccupancyGrid):
+        self.set_time(msg.header)
+        w, h, res = msg.info.width, msg.info.height, msg.info.resolution
+        grid = np.array(msg.data, dtype=np.int8).reshape(h, w)
+        ox, oy = msg.info.origin.position.x, msg.info.origin.position.y
+
+        def cells(mask, stride):
+            rows, cols = np.nonzero(mask)
+            keep = (rows % stride == 0) & (cols % stride == 0)
+            rows, cols = rows[keep], cols[keep]
+            return np.column_stack([ox + (cols + 0.5) * res, oy + (rows + 0.5) * res, np.zeros(len(rows))])
+
+        rr.log("world/map/occupied", rr.Points3D(cells(grid >= 65, 1), colors=[(240, 240, 240)], radii=res / 2))
+        rr.log("world/map/free", rr.Points3D(cells(grid == 0, 2), colors=[(45, 70, 85)], radii=res))
 
     def on_scan(self, msg: LaserScan):
         self.set_time(msg.header)
