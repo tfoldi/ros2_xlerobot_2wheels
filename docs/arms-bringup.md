@@ -17,7 +17,7 @@ one starts.
   only, so torque stays off and nothing is written to them. `torque_off:=false` gives them
   position command interfaces, for step 4.
 - Not there yet: arm controllers, MoveIt config (MoveIt is not installed), joint zero
-  offsets, a gripper controller, head controllers.
+  offsets in the model, a gripper controller, head controllers.
 
 ## Steps
 
@@ -29,11 +29,21 @@ one starts.
    `sts_hardware_interface` per-instance service names (upstream PR #22) still owes.
    Done when: 14 joints report at the controller rate on both buses, wheel odometry is
    unchanged.
-2. **Calibration.** Find each joint's zero and direction so the model's zero pose (arm
-   stretched straight) matches the real arm. Hand-guided: put each arm in the zero pose, read
-   the raw positions, store the offsets in `robot_dimensions.yaml` next to the limits (and
-   check the limits against the real end stops). The interface has a `one_key_calibration`
-   service that changes the servo's stored midpoint, it is a maintenance tool, not part of this.
+2. **Calibration.** Two parts, hand-guided, torque off.
+   - *Servo calibration, the lerobot way.* `tools/calibrate_arm.py calibrate --arm left|right`
+     runs lerobot's SO-101 procedure (arm in the middle of its range, then every joint swept
+     through its range). It writes the homing offset and the position limits into servos 1-6 and
+     saves `so101_follower/<id>.json` in the calibration directory lerobot uses
+     (`$HF_LEROBOT_HOME/calibration`, id `xlerobot_left_arm` / `xlerobot_right_arm`), so
+     `lerobot-calibrate` and the teleoperation tools see the same arms. It needs the bus to
+     itself, so the ROS stack is stopped for it, and it leaves the head and wheels alone.
+     `tools/calibrate_arm.py status` is the read-only check of what the servos hold.
+   - *Model zero.* The calibrated middle is not the model's zero (arm stretched straight). Put
+     each arm in the zero pose, read the steps with `status`, and store the difference to the
+     middle per joint in `robot_dimensions.yaml`. `xlerobot.ros2_control.xacro` then loads the
+     lerobot file and sets each joint's `position_center_steps` and limits from it. The
+     interface has a `one_key_calibration` service that changes the servo's stored midpoint,
+     it is a maintenance tool and not used here.
    Done when: moving a joint by hand moves the same joint the same way in Rerun, and both
    arms read zero within about 2 degrees in the zero pose.
 3. **Model in Rerun.** With real joint states the arms show in the Rerun view as the robot
