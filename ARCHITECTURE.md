@@ -468,7 +468,8 @@ Done when: autonomous point to point in a mapped room.
 
 **Phase 3, arms.** Both arms on `joint_trajectory_controller`, MoveIt 2, head pan/tilt,
 self collision and arm vs base geometry.
-Done when: MoveIt plans and executes on both arms.
+Done when: MoveIt plans and executes on both arms. Steps and risks in
+[docs/arms-bringup.md](docs/arms-bringup.md).
 
 **Phase 4, Isaac.** cuVSLAM replacing or fusing with slam_toolbox, nvblox costmap layer,
 cuMotion for the arms. First decision here is JetPack: reflash the Orin NX to 7.2 for Jazzy,
