@@ -69,6 +69,9 @@ GROUP = os.environ.get("GROUP", "dialout")
 RULES_PATH = os.environ.get("RULES_PATH", "/etc/udev/rules.d/99-xlerobot.rules")
 
 DEFAULT_ALIASES = ["xle-bus1", "xle-bus2"]
+# factory default serials that many identical devices share (a bare CP2102 reports 0001), a
+# rule on one of these would match every such device, so they are bound by USB port instead
+GENERIC_SERIALS = {"00000000", "0", "0000", "0001", "12345678"}
 CAMERA_ALIASES = ["xle-cam-head", "xle-cam-left", "xle-cam-right"]
 
 
@@ -181,7 +184,7 @@ def build_rule(dev, alias, counts):
     if dev["subsystem"] == "video4linux":
         rule += ', ATTR{index}=="0"'
     serial = dev.get("serial")
-    if serial and serial != "00000000" and counts.get(serial, 0) == 1:
+    if serial and serial not in GENERIC_SERIALS and counts.get(serial, 0) == 1:
         if dev.get("serial_is_short"):
             rule += (f', ATTRS{{idVendor}}=="{dev["vendor"]}"'
                      f', ATTRS{{idProduct}}=="{dev["product"]}"'
