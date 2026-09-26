@@ -32,14 +32,18 @@
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <xacro:macro name="sts_position_joint" params="name id lower upper">
+  <!-- read_only: no command interface, so the driver disables torque on the joint and
+       never writes to it, while its state is still read every cycle. -->
+  <xacro:macro name="sts_position_joint" params="name id lower upper read_only:=false">
     <joint name="${name}">
       <param name="motor_id">${id}</param>
       <param name="operating_mode">0</param>
-      <command_interface name="position">
-        <param name="min">${lower}</param>
-        <param name="max">${upper}</param>
-      </command_interface>
+      <xacro:unless value="${read_only}">
+        <command_interface name="position">
+          <param name="min">${lower}</param>
+          <param name="max">${upper}</param>
+        </command_interface>
+      </xacro:unless>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
       <state_interface name="effort"/>
@@ -52,16 +56,16 @@
 
   <!-- The six joints of one arm, IDs 1-6. Names and limits match so101_arm.xacro,
        which has the limits of the arm in upstream's URDF. -->
-  <xacro:macro name="sts_arm_joints" params="prefix">
-    <xacro:sts_position_joint name="${prefix}_shoulder_pan_joint"  id="1" lower="-2.16"      upper="2.16"/>
-    <xacro:sts_position_joint name="${prefix}_shoulder_lift_joint" id="2" lower="-0.22"      upper="3.37"/>
-    <xacro:sts_position_joint name="${prefix}_elbow_flex_joint"    id="3" lower="-0.22"      upper="3.14"/>
-    <xacro:sts_position_joint name="${prefix}_wrist_flex_joint"    id="4" lower="-1.6580628" upper="1.6580627"/>
-    <xacro:sts_position_joint name="${prefix}_wrist_roll_joint"    id="5" lower="-2.7438473" upper="2.8412063"/>
-    <xacro:sts_position_joint name="${prefix}_gripper_joint"       id="6" lower="-0.374533" upper="1.7453292"/>
+  <xacro:macro name="sts_arm_joints" params="prefix read_only">
+    <xacro:sts_position_joint name="${prefix}_shoulder_pan_joint"  id="1" lower="-2.16"      upper="2.16" read_only="${read_only}"/>
+    <xacro:sts_position_joint name="${prefix}_shoulder_lift_joint" id="2" lower="-0.22"      upper="3.37" read_only="${read_only}"/>
+    <xacro:sts_position_joint name="${prefix}_elbow_flex_joint"    id="3" lower="-0.22"      upper="3.14" read_only="${read_only}"/>
+    <xacro:sts_position_joint name="${prefix}_wrist_flex_joint"    id="4" lower="-1.6580628" upper="1.6580627" read_only="${read_only}"/>
+    <xacro:sts_position_joint name="${prefix}_wrist_roll_joint"    id="5" lower="-2.7438473" upper="2.8412063" read_only="${read_only}"/>
+    <xacro:sts_position_joint name="${prefix}_gripper_joint"       id="6" lower="-0.374533" upper="1.7453292" read_only="${read_only}"/>
   </xacro:macro>
 
-  <xacro:macro name="xlerobot_ros2_control" params="bus1_port bus2_port use_mock_hardware with_arms with_head dims">
+  <xacro:macro name="xlerobot_ros2_control" params="bus1_port bus2_port use_mock_hardware with_arms torque_off with_head dims">
 
     <xacro:property name="b"      value="${dims['base']}"/>
     <xacro:property name="h"      value="${dims['head']}"/>
@@ -83,14 +87,16 @@
         </hardware>
 
         <xacro:if value="${with_arms}">
-          <xacro:sts_arm_joints prefix="left_arm"/>
+          <xacro:sts_arm_joints prefix="left_arm" read_only="${torque_off}"/>
         </xacro:if>
 
         <xacro:if value="${with_head}">
           <xacro:sts_position_joint name="head_pan_joint"  id="7"
-                                    lower="${h['pan_limit_lower']}"  upper="${h['pan_limit_upper']}"/>
+                                    lower="${h['pan_limit_lower']}"  upper="${h['pan_limit_upper']}"
+                                    read_only="${torque_off}"/>
           <xacro:sts_position_joint name="head_tilt_joint" id="8"
-                                    lower="${h['tilt_limit_lower']}" upper="${h['tilt_limit_upper']}"/>
+                                    lower="${h['tilt_limit_lower']}" upper="${h['tilt_limit_upper']}"
+                                    read_only="${torque_off}"/>
         </xacro:if>
       </ros2_control>
     </xacro:if>
@@ -105,7 +111,7 @@
       </hardware>
 
       <xacro:if value="${with_arms}">
-        <xacro:sts_arm_joints prefix="right_arm"/>
+        <xacro:sts_arm_joints prefix="right_arm" read_only="${torque_off}"/>
       </xacro:if>
 
       <!-- The RIGHT motor is mounted mirrored (confirmed on the real robot by

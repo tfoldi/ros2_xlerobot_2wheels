@@ -30,6 +30,9 @@
   <xacro:arg name="lidar"             default="ld19"/>
   <!-- arms are phase 3, description only for now -->
   <xacro:arg name="with_arms"         default="false"/>
+  <!-- Arm and head joints without command interfaces: torque off, states only. Stays
+       true until they are calibrated, see docs/arms-bringup.md. Wheels are not affected. -->
+  <xacro:arg name="torque_off"    default="true"/>
   <!-- head pan/tilt (bus1, motor_id 7/8) is phase 3 too - not wired on the
        robot yet. Without this, bus1's ros2_control component still gets
        declared for head_pan/head_tilt alone and tries to open bus1_port,
@@ -79,6 +82,7 @@
           bus2_port="$(arg bus2_port)"
           use_mock_hardware="$(arg use_mock_hardware)"
           with_arms="$(arg with_arms)"
+          torque_off="$(arg torque_off)"
           with_head="$(arg with_head)"
           dims="${dims}"/>
     </xacro:unless>

@@ -13,6 +13,9 @@ one starts.
   The left arm and the head are on bus 1, the right arm and the wheels on bus 2.
 - `bringup.launch.py with_arms:=true` puts the arms in the model and their joints in
   `ros2_control`. It is off by default, so the arms are not in the model or in Rerun otherwise.
+- `torque_off:=true` (the default) declares the arm and head joints with state interfaces
+  only, so torque stays off and nothing is written to them. `torque_off:=false` gives them
+  position command interfaces, for step 4.
 - Not there yet: arm controllers, MoveIt config (MoveIt is not installed), joint zero
   offsets, a gripper controller, head controllers.
 

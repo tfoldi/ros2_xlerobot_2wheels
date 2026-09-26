@@ -120,6 +120,7 @@ def generate_launch_description():
     teleop = LaunchConfiguration("teleop")
     with_head = LaunchConfiguration("with_head")
     with_arms = LaunchConfiguration("with_arms")
+    torque_off = LaunchConfiguration("torque_off")
     record = LaunchConfiguration("record")
     foxglove = LaunchConfiguration("foxglove")
     cameras = LaunchConfiguration("cameras")
@@ -138,6 +139,7 @@ def generate_launch_description():
             " bus1_port:=", bus1_port,
             " bus2_port:=", bus2_port,
             " with_arms:=", with_arms,
+            " torque_off:=", torque_off,
             " with_head:=", with_head,
         ]),
         value_type=str,
@@ -156,6 +158,8 @@ def generate_launch_description():
         # with_arms:=true adds their joints to ros2_control (real buses, or use
         # use_mock_hardware:=true to see the model). Controllers come with phase 3.
         DeclareLaunchArgument("with_arms", default_value="false"),
+        # torque stays off on the arms and head (states only) until they are calibrated
+        DeclareLaunchArgument("torque_off", default_value="true"),
         DeclareLaunchArgument("record", default_value="false"),
         DeclareLaunchArgument("foxglove", default_value="false"),
         DeclareLaunchArgument("cameras", default_value="false"),
