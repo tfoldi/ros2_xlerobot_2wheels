@@ -12,7 +12,7 @@
   against the mechanical stops.
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-  <xacro:macro name="xlerobot_head" params="dims parent">
+  <xacro:macro name="xlerobot_head" params="dims parent sensor">
     <xacro:property name="h" value="${dims['head']}"/>
 
     <!-- The top base sits on the arm mounting surface, 0.045 m below it as in the
@@ -104,13 +104,17 @@
         </geometry>
         <material name="xle_part"/>
       </visual>
-      <visual>
-        <origin xyz="0.16265 -0.006 -1.16815" rpy="0 0 0"/>
-        <geometry>
-          <mesh filename="package://xlerobot_description/meshes/upstream/tophead6.stl" scale="0.001 0.001 0.001"/>
-        </geometry>
-        <material name="xle_motor"/>
-      </visual>
+      <!-- tophead6 is the bar for the depth cameras, the plain USB camera has its own
+           shell, see sensors.xacro -->
+      <xacro:unless value="${sensor == 'usbcam'}">
+        <visual>
+          <origin xyz="0.16265 -0.006 -1.16815" rpy="0 0 0"/>
+          <geometry>
+            <mesh filename="package://xlerobot_description/meshes/upstream/tophead6.stl" scale="0.001 0.001 0.001"/>
+          </geometry>
+          <material name="xle_motor"/>
+        </visual>
+      </xacro:unless>
     </link>
 
     <joint name="head_tilt_joint" type="revolute">

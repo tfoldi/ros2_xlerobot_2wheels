@@ -11,13 +11,17 @@
   <xacro:macro name="xlerobot_sensors" params="sensor dims">
 
     <!-- The head camera the robot has today: a plain USB webcam, the same model
-         as the wrist cameras (bringup cameras:=true, config/cameras.yaml). Body
-         size and pose on the head are approximate, not measured. -->
+         as the wrist cameras (bringup cameras:=true, config/cameras.yaml). The shell
+         is the printed one from the XLeRobot 3mf, placed with its lens hole centre on
+         head_camera_link, whose position is the measured lens centre. -->
     <xacro:if value="${sensor == 'usbcam'}">
       <link name="head_camera_link">
         <visual>
-          <geometry><box size="0.02 0.05 0.03"/></geometry>
-          <material name="xle_black"/>
+          <origin xyz="-0.0115 0 -0.0094" rpy="0 0 0"/>
+          <geometry>
+            <mesh filename="package://xlerobot_description/meshes/upstream/head_camera_shell.stl" scale="0.001 0.001 0.001"/>
+          </geometry>
+          <material name="xle_part"/>
         </visual>
         <inertial>
           <mass value="0.03"/>
