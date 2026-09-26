@@ -38,6 +38,10 @@ one starts.
      `lerobot-calibrate` and the teleoperation tools see the same arms. It needs the bus to
      itself, so the ROS stack is stopped for it, and it leaves the head and wheels alone.
      `tools/calibrate_arm.py status` is the read-only check of what the servos hold.
+   - *Head.* `calibrate_arm.py calibrate --arm head` does the same for pan and tilt (servos 7, 8
+     on bus 1) with the head looking straight ahead and level as the middle, file
+     `xlerobot_head.json` (lerobot has no robot type for the head, so it sits in
+     `robots/xlerobot_head/`). The model's head zero is that same pose, so no extra offset.
    - *Model zero.* The calibrated middle is not the model's zero (arm stretched straight). Put
      each arm in the zero pose, read the steps with `status`, and store the difference to the
      middle per joint in `robot_dimensions.yaml`. `xlerobot.ros2_control.xacro` then loads the
@@ -56,8 +60,8 @@ one starts.
 5. **MoveIt 2.** Install it, generate the config from the URDF, self-collision matrix
    including the mast, the head and the cart, planning groups per arm and for both.
    Done when: MoveIt plans and executes a collision-free move on each arm from RViz.
-6. **Head pan/tilt.** Controller on bus 1, limits checked against the mechanical stops, look-at
-   command for the head camera.
+6. **Head pan/tilt.** Controller on bus 1 (calibrated in step 2), look-at command for the head
+   camera.
 
 ## Risks
 

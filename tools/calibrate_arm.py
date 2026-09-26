@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""Calibrate one SO-101 arm the way lerobot does, and save the result in lerobot's format.
+"""Calibrate one SO-101 arm, or the head pan/tilt, the way lerobot does, and save the result in lerobot's format.
 
   status     read-only: positions, stored offsets and limits, and how they compare to the file
   calibrate  middle-of-range pose, then a sweep of every joint (lerobot's `calibrate()` for
              so101_follower): writes Homing_Offset and the position limits into the servos and
              <calibration dir>/robots/so101_follower/<id>.json
 
+The head (pan 7, tilt 8, on bus 1 with the left arm) uses the same procedure and file schema, with
+the "middle" being the head looking straight ahead and level. lerobot has no robot type for it, the
+file goes to robots/xlerobot_head/.
+
 Talks to the servo bus directly, so the ROS stack must be stopped (the tool refuses if another
-process holds the port). Only servo IDs 1-6 are touched, so the head (7, 8) and the wheels
-(9, 10) on the same bus are left alone. Torque stays off.
+process holds the port). Only the servo IDs of the chosen part are touched, so the rest of the
+bus (the other part, the wheels 9, 10) is left alone. Torque stays off.
 
 The file is the same one `lerobot-calibrate --robot.type=so101_follower --robot.id=<id>` writes,
 so lerobot picks it up from the same place (HF_LEROBOT_HOME, default ~/.cache/huggingface/lerobot).
@@ -17,6 +21,7 @@ Usage:
   python3 tools/calibrate_arm.py status    --arm left
   python3 tools/calibrate_arm.py calibrate --arm left
   python3 tools/calibrate_arm.py calibrate --arm right --port /dev/xle-bus2
+  python3 tools/calibrate_arm.py calibrate --arm head
 """
 
 import argparse
@@ -30,12 +35,7 @@ import time
 
 import serial
 
-# left arm + head on bus 1, right arm + wheels on bus 2 (xlerobot.ros2_control.xacro)
-ARM_PORTS = {"left": "/dev/xle-bus1", "right": "/dev/xle-bus2"}
-BAUD = 1_000_000
-
-# name -> servo ID, same names and order as lerobot's SO101Follower
-JOINTS = {
+SO101_JOINTS = {  # name -> servo ID, same names and order as lerobot's SO101Follower
     "shoulder_pan": 1,
     "shoulder_lift": 2,
     "elbow_flex": 3,
@@ -43,7 +43,16 @@ JOINTS = {
     "wrist_roll": 5,
     "gripper": 6,
 }
-FULL_TURN_JOINT = "wrist_roll"  # not swept, lerobot stores its range as 0..4095
+
+# part -> port, joints, joint stored as a full turn instead of swept (lerobot does that for the
+# wrist roll), lerobot robot type (the directory). Left arm + head on bus 1, right arm + wheels on
+# bus 2 (xlerobot.ros2_control.xacro).
+PARTS = {
+    "left": ("/dev/xle-bus1", SO101_JOINTS, "wrist_roll", "so101_follower"),
+    "right": ("/dev/xle-bus2", SO101_JOINTS, "wrist_roll", "so101_follower"),
+    "head": ("/dev/xle-bus1", {"head_pan": 7, "head_tilt": 8}, None, "xlerobot_head"),
+}
+BAUD = 1_000_000
 MAX_RES = 4095  # STS3215, 12 bit
 HALF_TURN = MAX_RES // 2  # 2047
 
@@ -147,22 +156,22 @@ def port_holders(port):
     return [h for h in holders if h[0] != os.getpid()]
 
 
-def calibration_path(robot_id, calibration_dir):
+def calibration_path(robot_id, calibration_dir, robot_type):
     if calibration_dir:
         directory = pathlib.Path(calibration_dir)
     else:
         home = pathlib.Path(os.environ.get("HF_LEROBOT_HOME", "~/.cache/huggingface/lerobot"))
-        directory = home / "calibration" / "robots" / "so101_follower"
+        directory = home / "calibration" / "robots" / robot_type
     return directory.expanduser() / f"{robot_id}.json"
 
 
-def open_bus(port):
+def open_bus(port, joints):
     holders = port_holders(port)
     if holders:
         lines = "\n".join(f"  pid {pid}: {cmd}" for pid, cmd in holders)
         sys.exit(f"{port} is open by another process, stop it first (the ROS bringup?):\n{lines}")
     bus = Bus(port)
-    missing = [name for name, i in JOINTS.items() if not bus.ping(i)]
+    missing = [name for name, i in joints.items() if not bus.ping(i)]
     if missing:
         bus.close()
         sys.exit(f"no answer from {', '.join(missing)} on {port}. Wrong --port, or arm power off?")
@@ -170,13 +179,13 @@ def open_bus(port):
 
 
 def cmd_status(args):
-    path = calibration_path(args.id, args.calibration_dir)
+    path = calibration_path(args.id, args.calibration_dir, args.robot_type)
     saved = json.loads(path.read_text()) if path.is_file() else None
-    bus = open_bus(args.port)
+    bus = open_bus(args.port, args.joints)
     print(f"{args.port}, calibration file: {path} ({'found' if saved else 'not found'})")
     print(f"{'joint':<14}{'id':>3}{'pos':>6}{'deg':>8}{'offset':>8}{'min':>6}{'max':>6}"
           f"{'V':>6}{'C':>4}   file")
-    for name, i in JOINTS.items():
+    for name, i in args.joints.items():
         pos = bus.position(i)
         offset = bus.read(i, HOMING_OFFSET, sign_bit=11)
         lo, hi = bus.read(i, MIN_POSITION_LIMIT), bus.read(i, MAX_POSITION_LIMIT)
@@ -201,17 +210,20 @@ def wait_for_enter():
 
 
 def cmd_calibrate(args):
-    path = calibration_path(args.id, args.calibration_dir)
-    bus = open_bus(args.port)
-    ids = list(JOINTS.values())
+    path = calibration_path(args.id, args.calibration_dir, args.robot_type)
+    bus = open_bus(args.port, args.joints)
+    ids = list(args.joints.values())
 
     for i in ids:
         bus.write(i, TORQUE_ENABLE, 0)
         bus.write(i, LOCK, 0)
         bus.write(i, OPERATING_MODE, 0)
-    print(f"Torque is off on the {args.arm} arm (servo IDs 1-6 on {args.port}).")
+    print(f"Torque is off on the {args.part} (servo IDs {ids[0]}-{ids[-1]} on {args.port}).")
 
-    input(f"Move the {args.arm} arm to the middle of its range of motion and press ENTER... ")
+    if args.part == "head":
+        input("Put the head looking straight ahead and level, then press ENTER... ")
+    else:
+        input(f"Move the {args.part} arm to the middle of its range of motion and press ENTER... ")
 
     # reset, then make the present position exactly a half turn, as lerobot's set_half_turn_homings
     for i in ids:
@@ -220,24 +232,24 @@ def cmd_calibrate(args):
         bus.write(i, MAX_POSITION_LIMIT, MAX_RES)
     time.sleep(0.05)
     offsets = {}
-    for name, i in JOINTS.items():
+    for name, i in args.joints.items():
         offsets[name] = bus.position(i) - HALF_TURN
         bus.write(i, HOMING_OFFSET, offsets[name], sign_bit=11)
     time.sleep(0.05)
-    for name, i in JOINTS.items():
+    for name, i in args.joints.items():
         pos = bus.position(i)
         if abs(pos - HALF_TURN) > 20:  # about 2 degrees, the arm is held by hand
             sys.exit(f"{name} reads {pos} after homing, expected about {HALF_TURN}. Nothing saved.")
 
     print("Move all joints sequentially through their entire ranges of motion.\n"
           "Recording positions. Press ENTER to stop...")
-    swept = [n for n in JOINTS if n != FULL_TURN_JOINT]
-    start = {n: bus.position(JOINTS[n]) for n in swept}
+    swept = [n for n in args.joints if n != args.full_turn]
+    start = {n: bus.position(args.joints[n]) for n in swept}
     mins, maxes = dict(start), dict(start)
     done = wait_for_enter()
     first = True
     while not done.is_set():
-        pos = {n: bus.position(JOINTS[n]) for n in swept}
+        pos = {n: bus.position(args.joints[n]) for n in swept}
         for n in swept:
             mins[n], maxes[n] = min(mins[n], pos[n]), max(maxes[n], pos[n])
         if not first:
@@ -248,7 +260,8 @@ def cmd_calibrate(args):
             print(f"{n:<15}| {mins[n]:>6} | {pos[n]:>6} | {maxes[n]:>6}\033[K")
         print("\033[K", end="")
         time.sleep(0.02)
-    mins[FULL_TURN_JOINT], maxes[FULL_TURN_JOINT] = 0, MAX_RES
+    if args.full_turn:
+        mins[args.full_turn], maxes[args.full_turn] = 0, MAX_RES
 
     still = [n for n in swept if mins[n] == maxes[n]]
     if still:
@@ -262,9 +275,9 @@ def cmd_calibrate(args):
             "range_min": mins[name],
             "range_max": maxes[name],
         }
-        for name, i in JOINTS.items()
+        for name, i in args.joints.items()
     }
-    for name, i in JOINTS.items():
+    for name, i in args.joints.items():
         bus.write(i, MIN_POSITION_LIMIT, mins[name])
         bus.write(i, MAX_POSITION_LIMIT, maxes[name])
         bus.write(i, LOCK, 1)
@@ -280,13 +293,16 @@ def cmd_calibrate(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=["status", "calibrate"])
-    parser.add_argument("--arm", choices=list(ARM_PORTS), required=True)
-    parser.add_argument("--port", help="default: /dev/xle-bus1 for left, /dev/xle-bus2 for right")
-    parser.add_argument("--id", help="lerobot robot id, the file name; default xlerobot_<arm>_arm")
-    parser.add_argument("--calibration-dir", help="default: $HF_LEROBOT_HOME/calibration/robots/so101_follower")
+    parser.add_argument("--part", "--arm", dest="part", choices=list(PARTS), required=True,
+                        help="left or right arm, or the head")
+    parser.add_argument("--port", help="default: /dev/xle-bus1 for left arm and head, /dev/xle-bus2 for right")
+    parser.add_argument("--id", help="lerobot robot id, the file name; default xlerobot_<part>_arm, xlerobot_head")
+    parser.add_argument("--calibration-dir",
+                        help="default: $HF_LEROBOT_HOME/calibration/robots/so101_follower (xlerobot_head for the head)")
     args = parser.parse_args()
-    args.port = args.port or ARM_PORTS[args.arm]
-    args.id = args.id or f"xlerobot_{args.arm}_arm"
+    port, args.joints, args.full_turn, args.robot_type = PARTS[args.part]
+    args.port = args.port or port
+    args.id = args.id or ("xlerobot_head" if args.part == "head" else f"xlerobot_{args.part}_arm")
     {"status": cmd_status, "calibrate": cmd_calibrate}[args.command](args)
 
 
