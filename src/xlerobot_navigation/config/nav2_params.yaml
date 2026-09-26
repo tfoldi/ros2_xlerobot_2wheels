@@ -1,8 +1,11 @@
 # Nav2 for the XLeRobot base. Without slam:=true the map -> odom transform is a static
 # identity published by navigation.launch.py and the global costmap is a rolling window,
 # wheel odometry only. With slam:=true slam_toolbox publishes map and map -> odom and
-# nav2_slam.yaml turns the global costmap into a static map layer, see slam.launch.py.
-# The local costmap always has the LD19 obstacle layer.
+# nav2_map.yaml turns the global costmap into a static map layer, see slam.launch.py.
+# The local costmap always has the LD19 obstacle layer. localization:=true runs map_server and
+# amcl on a saved map instead of slam_toolbox, amcl starts at initial_pose below, which is the
+# start mark the maps are made from (the map frame origin is the pose the mapping run
+# started at).
 #
 # footprint is a rectangle covering the real extremities, not the (smaller) body_length x
 # body_width chassis box: wheels stick out past the basket on y, and the rear caster sticks
@@ -145,3 +148,33 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         inflation_radius: 0.3
+
+map_server:
+  ros__parameters:
+    # overridden by the map launch argument
+    yaml_filename: ""
+
+amcl:
+  ros__parameters:
+    base_frame_id: "base_footprint"
+    odom_frame_id: "odom"
+    global_frame_id: "map"
+    scan_topic: /ldlidar_node/scan
+    robot_model_type: "nav2_amcl::DifferentialMotionModel"
+    laser_model_type: "likelihood_field"
+    laser_min_range: 0.30
+    laser_max_range: 10.0
+    max_beams: 60
+    min_particles: 500
+    max_particles: 2000
+    update_min_d: 0.10
+    update_min_a: 0.10
+    sigma_hit: 0.2
+    tf_broadcast: true
+    transform_tolerance: 1.0
+    set_initial_pose: true
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      yaw: 0.0

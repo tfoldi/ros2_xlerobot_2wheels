@@ -16,6 +16,8 @@ The slam_toolbox map (/map) is drawn as points in the map frame, with map -> odo
 /tf, so the robot, the scan and the plan sit in the map as SLAM sees it. The map frame
 starts at the robot's start pose.
 
+With amcl running, the particle cloud (/particle_cloud) is drawn in the map frame too.
+
 The LD19 scan (/ldlidar_node/scan) is drawn as points in its own frame, coloured
 by beam angle from red at scan angle 0, next to arrows for the scan's zero direction
 and the robot's front, so the mounting yaw can be checked by eye.
@@ -44,6 +46,7 @@ import rerun as rr
 import rerun.blueprint as rrb
 from geometry_msgs.msg import PoseStamped, TwistStamped
 import numpy as np
+from nav2_msgs.msg import ParticleCloud
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
@@ -62,7 +65,7 @@ BASE_FRAME = "base_footprint"
 MAP_FRAME = "map"
 LIDAR_FRAME = "ldlidar_link"
 LIDAR_ENTITIES = ("lidar/scan", "lidar/zero")
-MAP_ENTITIES = ("world/map/occupied", "world/map/free")
+MAP_ENTITIES = ("world/map/occupied", "world/map/free", "world/particles")
 MAP_TF_PERIOD = 0.2  # s, slam_toolbox publishes map -> odom at 50 Hz
 CAMERAS = ("head", "left", "right")
 FFMPEG_TYPE = "ffmpeg_image_transport_msgs/msg/FFMPEGPacket"
@@ -188,6 +191,9 @@ class RerunBridge(Node):
         self.create_subscription(LaserScan, "/ldlidar_node/scan", self.on_scan, qos_profile_sensor_data)
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(OccupancyGrid, "/map", self.on_map, latched)
+        self.create_subscription(
+            ParticleCloud, "/particle_cloud", self.on_particles,
+            QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.map_tf_time = 0.0
         self.create_subscription(TFMessage, "/tf", lambda m: self.on_tf(m, False), QoSProfile(depth=100))
         self.create_subscription(
@@ -312,6 +318,11 @@ class RerunBridge(Node):
 
         rr.log("world/map/occupied", rr.Points3D(cells(grid >= 65, 1), colors=[(240, 240, 240)], radii=res / 2))
         rr.log("world/map/free", rr.Points3D(cells(grid == 0, 2), colors=[(45, 70, 85)], radii=0.6 * res))
+
+    def on_particles(self, msg: ParticleCloud):
+        self.set_time(msg.header)
+        points = [(p.pose.position.x, p.pose.position.y, 0.05) for p in msg.particles]
+        rr.log("world/particles", rr.Points3D(points, colors=[(230, 159, 0)], radii=0.015))
 
     def on_scan(self, msg: LaserScan):
         self.set_time(msg.header)

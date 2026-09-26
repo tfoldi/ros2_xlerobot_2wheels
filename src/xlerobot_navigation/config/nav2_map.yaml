@@ -1,5 +1,6 @@
-# Loaded after nav2_params.yaml when navigation.launch.py runs with slam:=true: the
-# global costmap is the slam_toolbox map plus what the lidar sees now, not a rolling window.
+# Loaded after nav2_params.yaml when navigation.launch.py runs with slam:=true or
+# localization:=true: the global costmap is the map (from slam_toolbox or map_server) plus
+# what the lidar sees now, not a rolling window.
 global_costmap:
   global_costmap:
     ros__parameters:
