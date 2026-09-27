@@ -16,8 +16,7 @@ one starts.
 - `torque_off:=true` (the default) declares the arm and head joints with state interfaces
   only, so torque stays off and nothing is written to them. `torque_off:=false` gives them
   position command interfaces, for step 4.
-- Not there yet: arm controllers, MoveIt config (MoveIt is not installed), joint zero
-  offsets in the model, a gripper controller, head controllers.
+- Not there yet: MoveIt config (MoveIt is not installed), head controllers.
 
 ## Steps
 
@@ -60,10 +59,25 @@ one starts.
    arms read zero within about 2 degrees in the zero pose.
 3. **Model in Rerun.** With real joint states the arms show in the Rerun view as the robot
    sits, folded at rest.
-4. **Controllers.** `joint_trajectory_controller` for each arm, a gripper controller,
-   torque on. Start with small moves, low velocity and a joint at a time, a per-joint
-   velocity limit in `robot_dimensions.yaml`, and the safety supervisor's e-stop covering the
-   arm buses.
+4. **Controllers.** `joint_trajectory_controller` for each arm (five joints) and for each gripper,
+   torque on. They are spawned with `with_arms:=true torque_off:=false` (always in the sim), the
+   read-only bringup has none.
+   - The driver brings a commanded position joint up holding where it is: it reads the position,
+     sets the command and the servo's goal to it, and only then enables torque, so nothing jumps.
+     It refuses to start if a joint is more than 0.15 rad outside its limits (wrong calibration).
+     Releasing an e-stop does the same, an arm that sagged is held where it is now.
+   - Speed: `max_velocity` per joint in `robot_dimensions.yaml` (0.5 rad/s, the planning limit),
+     and the driver's `position_rate_limit` (1.25 x that) caps how fast the commanded position
+     may move whatever a trajectory asks. A trajectory faster than the cap lags and the
+     controller aborts it on the path tolerance (0.25 rad). The servos' `proportional_vel_max`
+     also caps large jumps. The driver clamps commands to the joint limits.
+   - E-stop: `tools/estop.py` calls the e-stop service of every bus (arms, head, wheels), the
+     servos lose torque and the arms go limp. `--release` holds them where they are.
+   - Testing without the robot: `use_mock_hardware:=true`, the Isaac Sim twin, or
+     `tools/fake_sts_bus.py`, which runs the real driver against simulated servos and logs every
+     torque and goal write.
+   Live test order: right arm first, a joint at a time, small moves from the folded rest pose,
+   the arm held by hand.
    Done when: a small trajectory on each arm tracks within a few degrees.
 5. **MoveIt 2.** Install it, generate the config from the URDF, self-collision matrix
    including the mast, the head and the cart, planning groups per arm and for both.

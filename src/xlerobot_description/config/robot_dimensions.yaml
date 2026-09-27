@@ -154,13 +154,18 @@ xlerobot:
     #   decreases. The driver reports (center - step), so -1 is its own direction, and for +1
     #   so101_arm.xacro reverses the joint axis and mirrors the limits, which gives the same
     #   pose. Checked by moving every joint by hand in Rerun.
+    # max_velocity: rad/s, the limit planners and trajectories plan with, low on purpose while the
+    #   arms are new. servo_speed_limit_steps: the servos' own cap, in steps/s (4096 per turn),
+    #   which a large jump of the command cannot exceed whatever the trajectory says. The cap
+    #   applies to every commanded position joint on the bus, the head too.
+    servo_speed_limit_steps: 600
     joints:
-      shoulder_pan:  {zero_step: {left: 2057, right: 2075}, direction:  1, lower: -2.16,      upper: 2.16}
-      shoulder_lift: {zero_step: {left: 3197, right: 3070}, direction: -1, lower: -0.22,      upper: 3.37}
-      elbow_flex:    {zero_step: {left:  989, right: 1056}, direction:  1, lower: -0.22,      upper: 3.14}
-      wrist_flex:    {zero_step: {left: 1978, right: 1991}, direction:  1, lower: -1.6580628, upper: 1.6580627}
-      wrist_roll:    {zero_step: {left: 2079, right: 2018}, direction: -1, lower: -2.7438473, upper: 2.8412063}
-      gripper:       {zero_step: {left: 1802, right: 1766}, direction:  1, lower: -0.374533,  upper: 1.7453292}
+      shoulder_pan:  {zero_step: {left: 2057, right: 2075}, direction:  1, max_velocity: 0.5, lower: -2.16,      upper: 2.16}
+      shoulder_lift: {zero_step: {left: 3197, right: 3070}, direction: -1, max_velocity: 0.5, lower: -0.22,      upper: 3.37}
+      elbow_flex:    {zero_step: {left:  989, right: 1056}, direction:  1, max_velocity: 0.5, lower: -0.22,      upper: 3.14}
+      wrist_flex:    {zero_step: {left: 1978, right: 1991}, direction:  1, max_velocity: 0.5, lower: -1.6580628, upper: 1.6580627}
+      wrist_roll:    {zero_step: {left: 2079, right: 2018}, direction: -1, max_velocity: 0.5, lower: -2.7438473, upper: 2.8412063}
+      gripper:       {zero_step: {left: 1802, right: 1766}, direction:  1, max_velocity: 0.5, lower: -0.374533,  upper: 1.7453292}
 
   # --- LD19 2D lidar, upside down under the second basket ---
   # x, y: measured, centred and in line with the drive axle, base_link frame (front is +x).

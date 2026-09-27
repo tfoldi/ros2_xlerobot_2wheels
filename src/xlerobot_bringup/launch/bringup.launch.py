@@ -37,7 +37,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import Command, LaunchConfiguration
+from launch.substitutions import Command, LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -121,6 +121,9 @@ def generate_launch_description():
     with_head = LaunchConfiguration("with_head")
     with_arms = LaunchConfiguration("with_arms")
     torque_off = LaunchConfiguration("torque_off")
+    arm_controllers = PythonExpression([
+        "'", with_arms, "' == 'true' and ('", torque_off, "' == 'false' or '", use_sim, "' == 'true')",
+    ])
     record = LaunchConfiguration("record")
     foxglove = LaunchConfiguration("foxglove")
     cameras = LaunchConfiguration("cameras")
@@ -192,6 +195,19 @@ def generate_launch_description():
             executable="spawner",
             arguments=["diff_drive_controller"],
         ),
+        # Arm controllers need command interfaces on the arm joints: not in the read-only
+        # bringup (torque_off:=true), always there in the sim. Each hardware component
+        # brings the joints up holding where they are, so these start holding too.
+        *[
+            Node(
+                package="controller_manager",
+                executable="spawner",
+                arguments=[name],
+                condition=IfCondition(arm_controllers),
+            )
+            for name in ("left_arm_controller", "right_arm_controller",
+                         "left_gripper_controller", "right_gripper_controller")
+        ],
 
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(teleop_launch_file),

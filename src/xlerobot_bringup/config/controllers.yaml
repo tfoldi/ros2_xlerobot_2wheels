@@ -27,6 +27,17 @@ controller_manager:
     diff_drive_controller:
       type: diff_drive_controller/DiffDriveController
 
+    # Arms, spawned only when the arm joints have command interfaces (with_arms:=true
+    # torque_off:=false, or the sim), see bringup.launch.py.
+    left_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    right_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    left_gripper_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    right_gripper_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
 diff_drive_controller:
   ros__parameters:
     left_wheel_names: ["left_wheel_joint"]
@@ -82,3 +93,87 @@ diff_drive_controller:
     # tighter than upstream's 500ms host watchdog, see ARCHITECTURE §4.4
     cmd_vel_timeout: 0.25
     use_stamped_vel: true
+
+# ---- arm controllers ----
+# Tolerances are in rad, the trajectory one aborts a goal that strays from the planned path
+# (a joint blocked or fighting something), the goal one is how close the arm must end up.
+
+left_arm_controller:
+  ros__parameters:
+    joints: [left_arm_shoulder_pan_joint, left_arm_shoulder_lift_joint, left_arm_elbow_flex_joint, left_arm_wrist_flex_joint, left_arm_wrist_roll_joint]
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    # A goal that names only some of the joints would leave the others to hold whatever
+    # the last trajectory ended on, better refused.
+    allow_partial_joints_goal: false
+    # Closed loop: the trajectory starts from the measured state. On activation the controller
+    # holds the position the joints are at, the driver seeds the command with it.
+    open_loop_control: false
+    state_publish_rate: 50.0
+    action_monitor_rate: 20.0
+    constraints:
+      stopped_velocity_tolerance: 0.05
+      goal_time: 1.5
+      left_arm_shoulder_pan_joint: {trajectory: 0.25, goal: 0.06}
+      left_arm_shoulder_lift_joint: {trajectory: 0.25, goal: 0.06}
+      left_arm_elbow_flex_joint: {trajectory: 0.25, goal: 0.06}
+      left_arm_wrist_flex_joint: {trajectory: 0.25, goal: 0.06}
+      left_arm_wrist_roll_joint: {trajectory: 0.25, goal: 0.06}
+
+right_arm_controller:
+  ros__parameters:
+    joints: [right_arm_shoulder_pan_joint, right_arm_shoulder_lift_joint, right_arm_elbow_flex_joint, right_arm_wrist_flex_joint, right_arm_wrist_roll_joint]
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    # A goal that names only some of the joints would leave the others to hold whatever
+    # the last trajectory ended on, better refused.
+    allow_partial_joints_goal: false
+    # Closed loop: the trajectory starts from the measured state. On activation the controller
+    # holds the position the joints are at, the driver seeds the command with it.
+    open_loop_control: false
+    state_publish_rate: 50.0
+    action_monitor_rate: 20.0
+    constraints:
+      stopped_velocity_tolerance: 0.05
+      goal_time: 1.5
+      right_arm_shoulder_pan_joint: {trajectory: 0.25, goal: 0.06}
+      right_arm_shoulder_lift_joint: {trajectory: 0.25, goal: 0.06}
+      right_arm_elbow_flex_joint: {trajectory: 0.25, goal: 0.06}
+      right_arm_wrist_flex_joint: {trajectory: 0.25, goal: 0.06}
+      right_arm_wrist_roll_joint: {trajectory: 0.25, goal: 0.06}
+
+left_gripper_controller:
+  ros__parameters:
+    joints: [left_arm_gripper_joint]
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    # A goal that names only some of the joints would leave the others to hold whatever
+    # the last trajectory ended on, better refused.
+    allow_partial_joints_goal: false
+    # Closed loop: the trajectory starts from the measured state. On activation the controller
+    # holds the position the joints are at, the driver seeds the command with it.
+    open_loop_control: false
+    state_publish_rate: 50.0
+    action_monitor_rate: 20.0
+    constraints:
+      stopped_velocity_tolerance: 0.05
+      goal_time: 1.5
+      left_arm_gripper_joint: {trajectory: 0.25, goal: 0.06}
+
+right_gripper_controller:
+  ros__parameters:
+    joints: [right_arm_gripper_joint]
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    # A goal that names only some of the joints would leave the others to hold whatever
+    # the last trajectory ended on, better refused.
+    allow_partial_joints_goal: false
+    # Closed loop: the trajectory starts from the measured state. On activation the controller
+    # holds the position the joints are at, the driver seeds the command with it.
+    open_loop_control: false
+    state_publish_rate: 50.0
+    action_monitor_rate: 20.0
+    constraints:
+      stopped_velocity_tolerance: 0.05
+      goal_time: 1.5
+      right_arm_gripper_joint: {trajectory: 0.25, goal: 0.06}

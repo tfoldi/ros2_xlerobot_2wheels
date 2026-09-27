@@ -34,12 +34,19 @@
 
   <!-- read_only: no command interface, so the driver disables torque on the joint and
        never writes to it, while its state is still read every cycle. -->
-  <xacro:macro name="sts_position_joint" params="name id lower upper center:=4095 read_only:=false">
+  <xacro:macro name="sts_position_joint" params="name id lower upper center:=4095 rate_limit:=0 read_only:=false">
     <joint name="${name}">
       <param name="motor_id">${id}</param>
       <param name="operating_mode">0</param>
       <!-- servo step that is 0 rad, the driver reports (center - step) -->
       <param name="position_center_steps">${center}</param>
+      <!-- the driver's own clamp, it ignores the command interface min/max below -->
+      <param name="min_position">${lower}</param>
+      <param name="max_position">${upper}</param>
+      <!-- cap on how fast the commanded position may move, rad/s, 0 = none. The driver holds
+           the target back to this speed, so a trajectory faster than that lags and the
+           controller aborts it. -->
+      <param name="position_rate_limit">${rate_limit}</param>
       <xacro:unless value="${read_only}">
         <command_interface name="position">
           <param name="min">${lower}</param>
@@ -56,14 +63,15 @@
     </joint>
   </xacro:macro>
 
-  <!-- One arm joint. The limits and the centre come from arms.joints in robot_dimensions.yaml
+  <!-- One arm joint. The limits, the centre and the speed cap (1.25 x the planning velocity limit)
+       come from arms.joints in robot_dimensions.yaml
        and match so101_arm.xacro: with direction +1 the model's joint is reversed against the
        source URDF, so the limits are mirrored. -->
   <xacro:macro name="sts_arm_joint" params="name id j side read_only">
     <xacro:property name="m" value="${-j['direction']}"/>
     <xacro:sts_position_joint name="${name}" id="${id}"
         lower="${min(m * j['lower'], m * j['upper'])}" upper="${max(m * j['lower'], m * j['upper'])}"
-        center="${j['zero_step'][side]}" read_only="${read_only}"/>
+        center="${j['zero_step'][side]}" rate_limit="${1.25 * j['max_velocity']}" read_only="${read_only}"/>
   </xacro:macro>
 
   <!-- The six joints of one arm, IDs 1-6, names as in so101_arm.xacro. -->
@@ -95,6 +103,7 @@
           <param name="serial_port">${bus1_port}</param>
           <param name="baud_rate">1000000</param>
           <param name="enable_mock_mode">$(arg use_mock_hardware)</param>
+          <param name="proportional_vel_max">${dims['arms']['servo_speed_limit_steps']}</param>
         </hardware>
 
         <xacro:if value="${with_arms}">
@@ -123,6 +132,7 @@
         <param name="serial_port">${bus2_port}</param>
         <param name="baud_rate">1000000</param>
         <param name="enable_mock_mode">$(arg use_mock_hardware)</param>
+        <param name="proportional_vel_max">${dims['arms']['servo_speed_limit_steps']}</param>
       </hardware>
 
       <xacro:if value="${with_arms}">
