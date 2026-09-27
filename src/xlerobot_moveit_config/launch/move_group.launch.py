@@ -14,6 +14,14 @@ RViz's renderer (OGRE, over GLX) needs an X11 window, but on a Wayland session Q
 its native Wayland backend, which crashes RViz on startup ("Unable to create the rendering
 window after 100 tries"). rviz_qt_platform:=xcb (the default) forces Qt onto XWayland instead,
 harmless on a plain X11 session too. Set it to the empty string to leave QT_QPA_PLATFORM alone.
+
+Same reasoning for rviz_qt_scale_1x (default true): forces Qt's own HiDPI autoscaling off
+(QT_AUTO_SCREEN_SCALE_FACTOR=0, QT_SCALE_FACTOR=1, QT_ENABLE_HIGHDPI_SCALING=0), so it renders
+one RViz pixel per screen pixel instead of guessing a scale from the monitor. This is
+independent of rviz_qt_platform: under XWayland the compositor can still upscale the whole
+X11 surface to match a fractional display scale set in the desktop's own display settings
+(that's compositor output scaling, not a Qt setting, and no env var here controls it) -
+lower the display's scale there if RViz still looks oversized with this on.
 """
 
 import os
@@ -73,9 +81,14 @@ def launch_setup(context):
                 moveit_config.joint_limits,
                 {"use_sim_time": use_sim_time},
             ],
-            # see the module docstring on rviz_qt_platform
-            additional_env={"QT_QPA_PLATFORM": LaunchConfiguration("rviz_qt_platform")}
-            if LaunchConfiguration("rviz_qt_platform").perform(context) else {},
+            # see the module docstring on rviz_qt_platform / rviz_qt_scale_1x
+            additional_env=dict(
+                ({"QT_QPA_PLATFORM": LaunchConfiguration("rviz_qt_platform")}
+                 if LaunchConfiguration("rviz_qt_platform").perform(context) else {}),
+                **({"QT_AUTO_SCREEN_SCALE_FACTOR": "0", "QT_SCALE_FACTOR": "1",
+                    "QT_ENABLE_HIGHDPI_SCALING": "0"}
+                   if LaunchConfiguration("rviz_qt_scale_1x").perform(context) == "true" else {}),
+            ),
             condition=IfCondition(LaunchConfiguration("rviz")),
         ),
     ]
@@ -86,6 +99,7 @@ def generate_launch_description():
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("rviz", default_value="false"),
         DeclareLaunchArgument("rviz_qt_platform", default_value="xcb"),
+        DeclareLaunchArgument("rviz_qt_scale_1x", default_value="true"),
         # false starts without the self-collision matrix, only for generating it
         DeclareLaunchArgument("disabled_collisions", default_value="true"),
         OpaqueFunction(function=launch_setup),
