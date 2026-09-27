@@ -1,4 +1,4 @@
-"""MoveIt 2 for the two arms: move_group and, with rviz:=true, RViz with the MotionPlanning panel.
+"""MoveIt 2 for the two arms: move_group and, with rviz:=true, RViz with the MotionPlanning display.
 
 Run it next to the bringup, it uses the controllers and joint states of that one:
 
@@ -9,6 +9,11 @@ Run it next to the bringup, it uses the controllers and joint states of that one
 
 The robot description here is only used for kinematics and collision, it does not have to match
 torque_off or the hardware, but it must have the arms.
+
+RViz's renderer (OGRE, over GLX) needs an X11 window, but on a Wayland session Qt defaults to
+its native Wayland backend, which crashes RViz on startup ("Unable to create the rendering
+window after 100 tries"). rviz_qt_platform:=xcb (the default) forces Qt onto XWayland instead,
+harmless on a plain X11 session too. Set it to the empty string to leave QT_QPA_PLATFORM alone.
 """
 
 import os
@@ -68,6 +73,9 @@ def launch_setup(context):
                 moveit_config.joint_limits,
                 {"use_sim_time": use_sim_time},
             ],
+            # see the module docstring on rviz_qt_platform
+            additional_env={"QT_QPA_PLATFORM": LaunchConfiguration("rviz_qt_platform")}
+            if LaunchConfiguration("rviz_qt_platform").perform(context) else {},
             condition=IfCondition(LaunchConfiguration("rviz")),
         ),
     ]
@@ -77,6 +85,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("rviz", default_value="false"),
+        DeclareLaunchArgument("rviz_qt_platform", default_value="xcb"),
         # false starts without the self-collision matrix, only for generating it
         DeclareLaunchArgument("disabled_collisions", default_value="true"),
         OpaqueFunction(function=launch_setup),
