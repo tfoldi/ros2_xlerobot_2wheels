@@ -126,19 +126,19 @@
       <xacro:sim_position_joint name="head_tilt_joint"/>
 
       <xacro:if value="${with_arms}">
-        <xacro:sim_position_joint name="left_arm_shoulder_pan_joint"/>
-        <xacro:sim_position_joint name="left_arm_shoulder_lift_joint"/>
-        <xacro:sim_position_joint name="left_arm_elbow_flex_joint"/>
-        <xacro:sim_position_joint name="left_arm_wrist_flex_joint"/>
-        <xacro:sim_position_joint name="left_arm_wrist_roll_joint"/>
-        <xacro:sim_position_joint name="left_arm_gripper_joint"/>
+        <xacro:sim_position_joint name="left_arm_shoulder_pan_joint" initial_position="${dims['arms']['rest_pose']['shoulder_pan']}"/>
+        <xacro:sim_position_joint name="left_arm_shoulder_lift_joint" initial_position="${dims['arms']['rest_pose']['shoulder_lift']}"/>
+        <xacro:sim_position_joint name="left_arm_elbow_flex_joint" initial_position="${dims['arms']['rest_pose']['elbow_flex']}"/>
+        <xacro:sim_position_joint name="left_arm_wrist_flex_joint" initial_position="${dims['arms']['rest_pose']['wrist_flex']}"/>
+        <xacro:sim_position_joint name="left_arm_wrist_roll_joint" initial_position="${dims['arms']['rest_pose']['wrist_roll']}"/>
+        <xacro:sim_position_joint name="left_arm_gripper_joint" initial_position="${dims['arms']['rest_pose']['gripper']}"/>
 
-        <xacro:sim_position_joint name="right_arm_shoulder_pan_joint"/>
-        <xacro:sim_position_joint name="right_arm_shoulder_lift_joint"/>
-        <xacro:sim_position_joint name="right_arm_elbow_flex_joint"/>
-        <xacro:sim_position_joint name="right_arm_wrist_flex_joint"/>
-        <xacro:sim_position_joint name="right_arm_wrist_roll_joint"/>
-        <xacro:sim_position_joint name="right_arm_gripper_joint"/>
+        <xacro:sim_position_joint name="right_arm_shoulder_pan_joint" initial_position="${dims['arms']['rest_pose']['shoulder_pan']}"/>
+        <xacro:sim_position_joint name="right_arm_shoulder_lift_joint" initial_position="${dims['arms']['rest_pose']['shoulder_lift']}"/>
+        <xacro:sim_position_joint name="right_arm_elbow_flex_joint" initial_position="${dims['arms']['rest_pose']['elbow_flex']}"/>
+        <xacro:sim_position_joint name="right_arm_wrist_flex_joint" initial_position="${dims['arms']['rest_pose']['wrist_flex']}"/>
+        <xacro:sim_position_joint name="right_arm_wrist_roll_joint" initial_position="${dims['arms']['rest_pose']['wrist_roll']}"/>
+        <xacro:sim_position_joint name="right_arm_gripper_joint" initial_position="${dims['arms']['rest_pose']['gripper']}"/>
       </xacro:if>
     </ros2_control>
 

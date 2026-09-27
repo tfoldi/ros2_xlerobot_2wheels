@@ -165,6 +165,15 @@ xlerobot:
     #   outside its limits makes the trajectory controller shut down. The servos' own
     #   calibrated range limits are the real stops.
     limit_margin: 0.1
+    # rest_pose: the folded pose the arms rest in, in the model's joint angles (lift and elbow
+    #   near their limits, the gripper closed at its limit), the same for both arms. The
+    #   sim's arms start in it and MoveIt has it as the named state `rest`. The real arms rest
+    #   a little differently, this one keeps clear of the hard stops.
+    rest_pose: {shoulder_pan: 0.0, shoulder_lift: 2.6, elbow_flex: -3.0, wrist_flex: 0.0, wrist_roll: 0.0, gripper: 0.35}
+    # folded_pose: the arms as they really lie when parked, folded to the hard stops (measured,
+    #   the elbow at its stop). MoveIt must take it as a start state, the self-collision matrix
+    #   is generated so that nothing this pose touches counts as a collision.
+    folded_pose: {shoulder_pan: 0.15, shoulder_lift: 2.75, elbow_flex: -3.17, wrist_flex: 0.0, wrist_roll: 0.0, gripper: 0.37}
     joints:
       shoulder_pan:  {zero_step: {left: 2057, right: 2075}, direction:  1, max_velocity: 0.5, lower: -2.16,      upper: 2.16}
       shoulder_lift: {zero_step: {left: 3197, right: 3070}, direction: -1, max_velocity: 0.5, lower: -0.22,      upper: 3.37}

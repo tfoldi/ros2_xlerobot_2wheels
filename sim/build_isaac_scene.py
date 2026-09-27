@@ -7,9 +7,10 @@ Run with the Isaac Sim venv, not the system/ROS Python:
     source ~/venvs/isaacsim/bin/activate
     python sim/build_isaac_scene.py
 
-Base + head only, no arms: arms are still stub box geometry (phase 3
-hasn't started). xlerobot.ros2_control_sim.xacro supports with_arms:=true;
-extending this script's joint list is the only change needed.
+Which joints are driven comes from the import URDF itself (sim/xlerobot_import.urdf, see
+docs/sim-twin.md): wheels by velocity, every other revolute joint by position. Render it with
+with_arms:=true to get the two SO-101 arms, which start in arms.rest_pose of
+robot_dimensions.yaml.
 
 Node names and the enable_extension/app_utils pattern follow Isaac Sim 6's
 own shipped reference (isaacsim/skills/isaac-sim-ros2-bridge/scripts/multi_robot_namespacing.py).
@@ -45,10 +46,37 @@ WHEEL_COMMANDS_TOPIC = "/isaac_wheel_commands"
 POSITION_COMMANDS_TOPIC = "/isaac_position_commands"
 JOINT_STATES_TOPIC = "/isaac_joint_states"
 
-# Wheels are velocity-driven (diff_drive_controller), head is position-driven
-# (matches operating_mode in xlerobot.ros2_control.xacro on the real robot).
-VELOCITY_JOINTS = ["left_wheel_joint", "right_wheel_joint"]
-POSITION_JOINTS = ["head_pan_joint", "head_tilt_joint"]
+DIMENSIONS_PATH = os.path.join(REPO_ROOT, "src", "xlerobot_description", "config", "robot_dimensions.yaml")
+
+
+def joints_from_urdf(urdf_path):
+    """(velocity joints, position joints) of the import URDF: the wheels are velocity-driven
+    (diff_drive_controller), every other revolute joint is position-driven (the head and the
+    arms, matching operating_mode in xlerobot.ros2_control.xacro on the real robot)."""
+    import xml.etree.ElementTree as ET
+
+    velocity, position = [], []
+    for joint in ET.parse(urdf_path).getroot().findall("joint"):
+        if joint.get("type") not in ("revolute", "continuous"):
+            continue
+        name = joint.get("name")
+        (velocity if name.endswith("_wheel_joint") else position).append(name)
+    return velocity, position
+
+
+def arm_rest_pose_deg():
+    """{'left_arm_elbow_flex_joint': degrees, ...} for the arm joints of the URDF, from arms.rest_pose."""
+    import math
+
+    import yaml
+
+    with open(DIMENSIONS_PATH) as f:
+        rest = yaml.safe_load(f)["xlerobot"]["arms"]["rest_pose"]
+    return {f"{side}_arm_{joint}_joint": math.degrees(value)
+            for side in ("left", "right") for joint, value in rest.items()}
+
+
+VELOCITY_JOINTS, POSITION_JOINTS = joints_from_urdf(URDF_PATH) if os.path.isfile(URDF_PATH) else ([], [])
 
 
 def import_urdf():
@@ -76,10 +104,8 @@ def import_urdf():
         # by these two patterns (nothing else exists in the base+head-only
         # import) keeps whatever the importer defaults to.
         joint_target_type={
-            "left_wheel_joint": "velocity",
-            "right_wheel_joint": "velocity",
-            "head_pan_joint": "position",
-            "head_tilt_joint": "position",
+            **{name: "velocity" for name in VELOCITY_JOINTS},
+            **{name: "position" for name in POSITION_JOINTS},
         },
         run_asset_transformer=True,
     )
@@ -149,20 +175,35 @@ def add_robot_to_stage(imported_usd_path):
 # velocity error into torque); position-driven joints need both. These
 # values are picked to make closed-loop control visibly work, not tuned
 # against the real servo's torque curve - revisit once that matters.
-JOINT_DRIVE_GAINS = {
-    "left_wheel_joint": (0.0, 1e5, 1e4),
-    "right_wheel_joint": (0.0, 1e5, 1e4),
-    "head_pan_joint": (1e4, 1e3, 1e3),
-    "head_tilt_joint": (1e4, 1e3, 1e3),
-}
+WHEEL_GAINS = (0.0, 1e5, 1e4)
+HEAD_GAINS = (1e4, 1e3, 1e3)
+# Arm joints: overdamped like the head's so a stiff drive on a light link stays stable, the force
+# limit is a few times the servo's rated torque (3.35 Nm, the gripper 10) so the arm holds its
+# pose under gravity. Not tuned, the first thing to look at if an arm sags or oscillates.
+ARM_GAINS = (2e3, 2e2, 50.0)
+
+
+def joint_gains(name):
+    if name.endswith("_wheel_joint"):
+        return WHEEL_GAINS
+    if name.startswith("head_"):
+        return HEAD_GAINS
+    return ARM_GAINS
 
 
 def configure_joint_drives():
     import omni.usd
     from pxr import UsdPhysics
 
+    try:
+        from pxr import PhysxSchema
+    except ImportError:
+        PhysxSchema = None
+
+    rest = arm_rest_pose_deg()
     stage = omni.usd.get_context().get_stage()
-    for joint_name, (stiffness, damping, max_force) in JOINT_DRIVE_GAINS.items():
+    for joint_name in VELOCITY_JOINTS + POSITION_JOINTS:
+        stiffness, damping, max_force = joint_gains(joint_name)
         joint_path = f"{ROBOT_PRIM_PATH}/Physics/{joint_name}"
         prim = stage.GetPrimAtPath(joint_path)
         if not prim.IsValid():
@@ -172,7 +213,18 @@ def configure_joint_drives():
         drive.CreateStiffnessAttr(stiffness)
         drive.CreateDampingAttr(damping)
         drive.CreateMaxForceAttr(max_force)
-    print("Joint drive gains set (replacing the importer's zero-gain defaults)")
+        if joint_name in rest:
+            # Start in the rest pose: the drive target, and the joint state the physics starts from.
+            # Without the target the drive pulls the arm to 0 (stretched out) on the first step.
+            drive.CreateTargetPositionAttr(rest[joint_name])
+            if PhysxSchema is not None:
+                state = PhysxSchema.JointStateAPI.Apply(prim, "angular")
+                state.CreatePositionAttr(rest[joint_name])
+                state.CreateVelocityAttr(0.0)
+            else:
+                print(f"WARNING: no PhysxSchema, {joint_name} starts at 0 and is pulled to the rest pose")
+    print(f"Joint drive gains set (replacing the importer's zero-gain defaults), "
+          f"{len(rest and [j for j in POSITION_JOINTS if j in rest])} arm joints start in the rest pose")
 
 
 def capture_screenshot(path):

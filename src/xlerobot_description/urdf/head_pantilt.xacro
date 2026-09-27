@@ -45,6 +45,12 @@
         </geometry>
         <material name="xle_part"/>
       </visual>
+      <collision>
+        <origin xyz="-0.44 -0.005 -0.6" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://xlerobot_description/meshes/upstream/topbase1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+      </collision>
       <visual>
         <origin xyz="-0.298 0.006 -0.715" rpy="0 0 3.14"/>
         <geometry>
@@ -52,12 +58,22 @@
         </geometry>
         <material name="xle_motor"/>
       </visual>
+      <collision>
+        <origin xyz="-0.298 0.006 -0.715" rpy="0 0 3.14"/>
+        <geometry>
+          <mesh filename="package://xlerobot_description/meshes/upstream/topbase2.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+      </collision>
       <xacro:if value="${neck_ext > 0.01}">
         <visual>
           <origin xyz="-0.103 0 ${0.323 + neck_ext / 2.0}" rpy="0 0 0"/>
           <geometry><cylinder radius="0.03" length="${neck_ext}"/></geometry>
           <material name="xle_motor"/>
         </visual>
+      <collision>
+          <origin xyz="-0.103 0 ${0.323 + neck_ext / 2.0}" rpy="0 0 0"/>
+          <geometry><cylinder radius="0.03" length="${neck_ext}"/></geometry>
+        </collision>
       </xacro:if>
     </link>
 
@@ -74,6 +90,12 @@
         </geometry>
         <material name="xle_part"/>
       </visual>
+      <collision>
+        <origin xyz="-0.335 -0.005 -0.923" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://xlerobot_description/meshes/upstream/tophead1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+      </collision>
       <visual>
         <origin xyz="1.17 -0.009 0.262" rpy="-3.141592 -1.57 -3.141592"/>
         <geometry>
@@ -81,6 +103,12 @@
         </geometry>
         <material name="xle_motor"/>
       </visual>
+      <collision>
+        <origin xyz="1.17 -0.009 0.262" rpy="-3.141592 -1.57 -3.141592"/>
+        <geometry>
+          <mesh filename="package://xlerobot_description/meshes/upstream/tophead4.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+      </collision>
     </link>
 
     <joint name="head_pan_joint" type="revolute">
@@ -104,6 +132,12 @@
         </geometry>
         <material name="xle_part"/>
       </visual>
+      <collision>
+        <origin xyz="0.16265 -0.006 -1.16815" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://xlerobot_description/meshes/upstream/tophead5.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+      </collision>
       <!-- tophead6 is the bar for the depth cameras, the plain USB camera has its own
            shell, see sensors.xacro -->
       <xacro:unless value="${sensor == 'usbcam'}">
@@ -114,6 +148,12 @@
           </geometry>
           <material name="xle_motor"/>
         </visual>
+      <collision>
+          <origin xyz="0.16265 -0.006 -1.16815" rpy="0 0 0"/>
+          <geometry>
+            <mesh filename="package://xlerobot_description/meshes/upstream/tophead6.stl" scale="0.001 0.001 0.001"/>
+          </geometry>
+        </collision>
       </xacro:unless>
     </link>
 

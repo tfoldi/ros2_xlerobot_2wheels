@@ -1,6 +1,6 @@
 # Isaac Sim simulation support
 
-An Isaac Sim scene of the base + head, wired to the real `ros2_control`
+An Isaac Sim scene of the base, the head and the two SO-101 arms, wired to the real `ros2_control`
 stack over ROS 2 topics, for development and testing without hardware
 attached.
 
@@ -17,10 +17,10 @@ position on its own convention (see `sum_wrapped_joint_states` below),
 which is a different problem from R1 and does not substitute for hardware
 validation of it.
 
-Arms are not included in the current scene. The description has both SO-101
-arms (`with_arms:=true`) and `xlerobot.ros2_control_sim.xacro` declares their
-joints; importing with `with_arms:=true` and extending
-`sim/build_isaac_scene.py`'s joint list is what is needed to include them.
+The arms are in the scene when the import URDF has them (`with_arms:=true`, below). They start in
+`arms.rest_pose` of `robot_dimensions.yaml`, the folded pose, and take the same arm controllers as the
+robot (`left_arm_controller`, `left_gripper_controller`, ...), so MoveIt plans and executes against the
+twin exactly as against the robot, see "MoveIt against the twin".
 
 ## Requirements
 
@@ -148,8 +148,8 @@ authoritative.
 
 | Path | Purpose |
 |---|---|
-| `sim/xlerobot_import.urdf` | Generated. Plain URDF for the Isaac Sim importer, rendered from the xacro with `use_ros2_control:=false` and `with_arms:=false`. Gitignored. |
-| `sim/build_isaac_scene.py` | Imports the URDF, sets joint drive gains, builds the ROS 2 bridge graph, saves the stage. `--test-frames N` presses Play and steps N frames first, to catch graph errors before saving. `--screenshot PATH` captures a viewport image after building, for checking mesh placement without opening the GUI. |
+| `sim/xlerobot_import.urdf` | Generated. Plain URDF for the Isaac Sim importer, rendered from the xacro with `use_ros2_control:=false` and `with_arms:=true`. Gitignored. |
+| `sim/build_isaac_scene.py` | Imports the URDF, drives the wheels by velocity and every other revolute joint by position (from the URDF), sets joint drive gains and the arms' start pose, builds the ROS 2 bridge graph, saves the stage. `--test-frames N` presses Play and steps N frames first, to catch graph errors before saving. `--screenshot PATH` captures a viewport image after building, for checking mesh placement without opening the GUI. |
 | `sim/output/` | Generated. `xlerobot_twin.usd` is the scene to open in Isaac Sim. Gitignored. |
 | `sim/launch_gui.py` | Opens a given USD stage in the interactive Isaac Sim GUI (not headless), waits for a human to press Play. Defaults to `sim/output/xlerobot_twin.usd`. |
 | `sim/run_headless.py` | The headless equivalent: opens the stage, presses Play itself, and stays running so a `ros2_control` bringup elsewhere can drive it. No display needed - the form meant for CI or the Jetson. |
@@ -159,7 +159,7 @@ Regenerate the import URDF after xacro changes:
 ```bash
 source /opt/ros/jazzy/setup.bash && source install/setup.bash
 xacro src/xlerobot_description/urdf/xlerobot.urdf.xacro \
-  use_ros2_control:=false with_arms:=false sensor:=none \
+  use_ros2_control:=false with_arms:=true sensor:=none \
   > sim/xlerobot_import.urdf
 ```
 
@@ -241,7 +241,22 @@ afterward.
   see the note above `## Running headless`. `base_link`'s cart body mesh
   placement is derived from upstream's reference numbers, not measured
   against this specific robot.
-- Arms are not in the scene yet, only base and head.
+- The arm drive gains (`ARM_GAINS`) are a first guess: the simulated arms hold the rest pose with
+  about 0.02 rad of gravity sag, and nothing is tuned to the real servos.
+
+## MoveIt against the twin
+
+```bash
+# terminal 1, the twin (Isaac's own environment, see above)
+python sim/run_headless.py
+# terminal 2
+ros2 launch xlerobot_bringup bringup.launch.py with_arms:=true use_sim:=true
+ros2 launch xlerobot_moveit_config move_group.launch.py rviz:=true
+python3 tools/moveit_smoke_test.py      # plans and executes on both arms, checks IK
+```
+
+Use one `ROS_DOMAIN_ID` for all of them. `tools/moveit_smoke_test.py` also runs against the mock
+hardware and the robot, it only needs the controllers and `move_group`.
 
 ## Omniverse MCP (optional)
 

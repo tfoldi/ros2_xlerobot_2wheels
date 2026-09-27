@@ -16,7 +16,7 @@ one starts.
 - `torque_off:=true` (the default) declares the arm and head joints with state interfaces
   only, so torque stays off and nothing is written to them. `torque_off:=false` gives them
   position command interfaces, for step 4.
-- Not there yet: MoveIt config (MoveIt is not installed), head controllers.
+- Not there yet: the head controller.
 
 ## Steps
 
@@ -79,9 +79,24 @@ one starts.
    Live test order: right arm first, a joint at a time, small moves from the folded rest pose,
    the arm held by hand.
    Done when: a small trajectory on each arm tracks within a few degrees.
-5. **MoveIt 2.** Install it, generate the config from the URDF, self-collision matrix
-   including the mast, the head and the cart, planning groups per arm and for both.
-   Done when: MoveIt plans and executes a collision-free move on each arm from RViz.
+5. **MoveIt 2.** `xlerobot_moveit_config` (`ros-jazzy-moveit`, `moveit-py` and `pick-ik` from apt).
+   - Planning groups `left_arm`, `right_arm` (five joints each, up to the gripper link),
+     `left_gripper`, `right_gripper`, `both_arms` and `head`, named states `rest` (the folded
+     pose, `arms.rest_pose`), `zero`, `open`, `closed`. Trajectories go to the arm controllers of
+     step 4. `rest` is the way back to the folded pose.
+   - The arms have five joints, so `pick_ik` solves position only. Joint-space goals and named
+     states are complete, a pose goal needs a reachable position and gets whatever orientation
+     the joints give.
+   - Self-collision matrix: `tools/generate_moveit_collisions.py` samples random poses through
+     `move_group` and writes `config/disabled_collisions.xacro`, the Setup Assistant's method
+     without the GUI. The cart, the top base, the head, the camera and the lidar have collision
+     geometry (their visuals) so the planner keeps the arms clear of them, the mast included.
+     Regenerate it after the geometry, the joint limits or the rest pose change.
+   - Run: `ros2 launch xlerobot_moveit_config move_group.launch.py [rviz:=true]` next to the
+     bringup. `tools/moveit_smoke_test.py` plans and executes moves on both arms and the
+     grippers and checks IK, against the mock hardware, the Isaac twin or the robot.
+   Done when: MoveIt plans and executes a collision-free move on each arm from RViz. The smoke
+   test passes against the mock hardware and the Isaac twin, not yet on the robot.
 6. **Head pan/tilt.** Controller on bus 1 (calibrated in step 2), look-at command for the head
    camera.
 

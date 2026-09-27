@@ -23,6 +23,12 @@
           </geometry>
           <material name="xle_part"/>
         </visual>
+      <collision>
+          <origin xyz="-0.0115 0 -0.0094" rpy="0 0 0"/>
+          <geometry>
+            <mesh filename="package://xlerobot_description/meshes/upstream/head_camera_shell.stl" scale="0.001 0.001 0.001"/>
+          </geometry>
+        </collision>
         <inertial>
           <mass value="0.03"/>
           <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
@@ -48,6 +54,9 @@
           <geometry><box size="0.025 0.090 0.025"/></geometry>
           <material name="xle_black"/>
         </visual>
+      <collision>
+          <geometry><box size="0.025 0.090 0.025"/></geometry>
+        </collision>
         <inertial>
           <mass value="0.072"/>
           <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
@@ -75,6 +84,9 @@
           <geometry><box size="0.035 0.165 0.030"/></geometry>
           <material name="xle_black"/>
         </visual>
+      <collision>
+          <geometry><box size="0.035 0.165 0.030"/></geometry>
+        </collision>
         <inertial>
           <mass value="0.12"/>
           <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
@@ -107,6 +119,9 @@
           <geometry><cylinder radius="0.0516" length="0.0717"/></geometry>
           <material name="xle_black"/>
         </visual>
+      <collision>
+          <geometry><cylinder radius="0.0516" length="0.0717"/></geometry>
+        </collision>
         <inertial>
           <mass value="0.83"/>
           <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
