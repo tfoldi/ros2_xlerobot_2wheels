@@ -21,29 +21,29 @@
   wrist_camera:=false leaves out the camera links.
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-  <xacro:macro name="so101_arm" params="prefix parent xyz rpy joints wrist_camera:=true">
+  <xacro:macro name="so101_arm" params="prefix parent xyz rpy joints margin wrist_camera:=true">
 
     <!-- joint direction, see arms.joints in robot_dimensions.yaml: m is -1 to reverse the
          axis (and mirror the limits) where the servo step goes the same way as the joint
          angle. Reversing axis and angle together is the same pose. -->
     <xacro:property name="m_pan" value="${-joints['shoulder_pan']['direction']}"/>
-    <xacro:property name="lo_pan" value="${min(m_pan * joints['shoulder_pan']['lower'], m_pan * joints['shoulder_pan']['upper'])}"/>
-    <xacro:property name="hi_pan" value="${max(m_pan * joints['shoulder_pan']['lower'], m_pan * joints['shoulder_pan']['upper'])}"/>
+    <xacro:property name="lo_pan" value="${min(m_pan * joints['shoulder_pan']['lower'], m_pan * joints['shoulder_pan']['upper']) - margin}"/>
+    <xacro:property name="hi_pan" value="${max(m_pan * joints['shoulder_pan']['lower'], m_pan * joints['shoulder_pan']['upper']) + margin}"/>
     <xacro:property name="m_lift" value="${-joints['shoulder_lift']['direction']}"/>
-    <xacro:property name="lo_lift" value="${min(m_lift * joints['shoulder_lift']['lower'], m_lift * joints['shoulder_lift']['upper'])}"/>
-    <xacro:property name="hi_lift" value="${max(m_lift * joints['shoulder_lift']['lower'], m_lift * joints['shoulder_lift']['upper'])}"/>
+    <xacro:property name="lo_lift" value="${min(m_lift * joints['shoulder_lift']['lower'], m_lift * joints['shoulder_lift']['upper']) - margin}"/>
+    <xacro:property name="hi_lift" value="${max(m_lift * joints['shoulder_lift']['lower'], m_lift * joints['shoulder_lift']['upper']) + margin}"/>
     <xacro:property name="m_elbow" value="${-joints['elbow_flex']['direction']}"/>
-    <xacro:property name="lo_elbow" value="${min(m_elbow * joints['elbow_flex']['lower'], m_elbow * joints['elbow_flex']['upper'])}"/>
-    <xacro:property name="hi_elbow" value="${max(m_elbow * joints['elbow_flex']['lower'], m_elbow * joints['elbow_flex']['upper'])}"/>
+    <xacro:property name="lo_elbow" value="${min(m_elbow * joints['elbow_flex']['lower'], m_elbow * joints['elbow_flex']['upper']) - margin}"/>
+    <xacro:property name="hi_elbow" value="${max(m_elbow * joints['elbow_flex']['lower'], m_elbow * joints['elbow_flex']['upper']) + margin}"/>
     <xacro:property name="m_wflex" value="${-joints['wrist_flex']['direction']}"/>
-    <xacro:property name="lo_wflex" value="${min(m_wflex * joints['wrist_flex']['lower'], m_wflex * joints['wrist_flex']['upper'])}"/>
-    <xacro:property name="hi_wflex" value="${max(m_wflex * joints['wrist_flex']['lower'], m_wflex * joints['wrist_flex']['upper'])}"/>
+    <xacro:property name="lo_wflex" value="${min(m_wflex * joints['wrist_flex']['lower'], m_wflex * joints['wrist_flex']['upper']) - margin}"/>
+    <xacro:property name="hi_wflex" value="${max(m_wflex * joints['wrist_flex']['lower'], m_wflex * joints['wrist_flex']['upper']) + margin}"/>
     <xacro:property name="m_roll" value="${-joints['wrist_roll']['direction']}"/>
-    <xacro:property name="lo_roll" value="${min(m_roll * joints['wrist_roll']['lower'], m_roll * joints['wrist_roll']['upper'])}"/>
-    <xacro:property name="hi_roll" value="${max(m_roll * joints['wrist_roll']['lower'], m_roll * joints['wrist_roll']['upper'])}"/>
+    <xacro:property name="lo_roll" value="${min(m_roll * joints['wrist_roll']['lower'], m_roll * joints['wrist_roll']['upper']) - margin}"/>
+    <xacro:property name="hi_roll" value="${max(m_roll * joints['wrist_roll']['lower'], m_roll * joints['wrist_roll']['upper']) + margin}"/>
     <xacro:property name="m_grip" value="${-joints['gripper']['direction']}"/>
-    <xacro:property name="lo_grip" value="${min(m_grip * joints['gripper']['lower'], m_grip * joints['gripper']['upper'])}"/>
-    <xacro:property name="hi_grip" value="${max(m_grip * joints['gripper']['lower'], m_grip * joints['gripper']['upper'])}"/>
+    <xacro:property name="lo_grip" value="${min(m_grip * joints['gripper']['lower'], m_grip * joints['gripper']['upper']) - margin}"/>
+    <xacro:property name="hi_grip" value="${max(m_grip * joints['gripper']['lower'], m_grip * joints['gripper']['upper']) + margin}"/>
 
     <joint name="${prefix}_mount_joint" type="fixed">
       <parent link="${parent}"/>

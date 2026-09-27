@@ -159,6 +159,12 @@ xlerobot:
     #   which a large jump of the command cannot exceed whatever the trajectory says. The cap
     #   applies to every commanded position joint on the bus, the head too.
     servo_speed_limit_steps: 600
+    # limit_margin: rad added to both ends of every arm joint's limits, in the model and in
+    #   ros2_control. The upstream limits are another arm's stops, and the folded rest pose sits
+    #   at a hard stop that reads up to 2 degrees past them here (left elbow). A joint measured
+    #   outside its limits makes the trajectory controller shut down. The servos' own
+    #   calibrated range limits are the real stops.
+    limit_margin: 0.1
     joints:
       shoulder_pan:  {zero_step: {left: 2057, right: 2075}, direction:  1, max_velocity: 0.5, lower: -2.16,      upper: 2.16}
       shoulder_lift: {zero_step: {left: 3197, right: 3070}, direction: -1, max_velocity: 0.5, lower: -0.22,      upper: 3.37}
