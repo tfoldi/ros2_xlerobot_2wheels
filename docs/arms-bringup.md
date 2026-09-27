@@ -48,8 +48,8 @@ one starts.
      where the model reads 0, and `direction`. `xlerobot.ros2_control.xacro` passes the
      zero as `position_center_steps`, and where the direction differs from the driver's,
      `so101_arm.xacro` reverses the joint axis and mirrors the limits. The values are
-     read off the arms held stretched straight (`status`, per arm, the gripper is an estimate
-     from the calibration end stops). The directions are checked by moving each joint by hand in
+     read off the arms held stretched straight (`status`, per arm). The gripper's zero comes from
+     the closed end stop of the calibration instead: the model's jaws are closed at its lower limit. The directions are checked by moving each joint by hand in
      Rerun. The head is the same with
      `head.pan_zero_step` and `head.pan_direction` (and tilt).
      The interface has a `one_key_calibration` service that changes the servo's stored
