@@ -1,21 +1,22 @@
 # ros2_xlerobot_2wheels
 
 ROS 2 Jazzy stack for [XLeRobot](https://github.com/Vector-Wangel/XLeRobot) **0.4.0**, the
-servo two-wheel differential drive version. Targets the NVIDIA Isaac stack on Jetson,
-developed on an x86 box with an NVIDIA GPU.
+servo two-wheel differential drive version. Built for the NVIDIA Isaac stack on Jetson,
+but runs on any PC with a decent NVIDIA GPU.
 
 > **Status: running on hardware.** Base drives, SLAM/AMCL localize on a saved map, and Nav2
 > navigates it, all on the real robot. Both SO-101 arms and the head have a real URDF,
-> calibration workflow, `ros2_control` (torque off by default, arm/gripper trajectory
-> controllers when it's on) and a MoveIt 2 config, checked against mock hardware, a fake servo
-> bus running the real driver, and the Isaac Sim twin; live-hardware arm motion is the current
-> work. See [ARCHITECTURE.md](ARCHITECTURE.md) and [§ Phases](ARCHITECTURE.md#8-phases) for
-> what's next, [docs/arms-bringup.md](docs/arms-bringup.md) for the arm procedure.
+> calibration workflow, `ros2_control` (torqued and commandable by default, pass
+> `torque_off:=true` for a states-only bringup) and a MoveIt 2 config, checked against mock
+> hardware, a fake servo bus running the real driver, the Isaac Sim twin, and live hardware -
+> both arms and the head move and plan through MoveIt 2 on the real robot. See
+> [ARCHITECTURE.md](ARCHITECTURE.md) and [§ Phases](ARCHITECTURE.md#8-phases) for what's next,
+> [docs/arms-bringup.md](docs/arms-bringup.md) for the arm procedure.
 
-This is not a fork of XLeRobot. It reuses upstream's CAD, motor conventions and kinematics,
-and replaces the Python control path with `ros2_control` so Nav2, MoveIt 2 and Isaac ROS work
-natively. Upstream stays the hardware project and the imitation learning path. `lerobot`
-comes back in phase 5 as a client of this stack, not the thing driving it.
+This repository is not built on top of XLeRobot, nor is it a fork of it. It reuses the same
+platform - CAD, motor conventions and kinematics - but replaces the LeRobot-integrated Python
+control path with `ros2_control` so Nav2, MoveIt 2 and Isaac ROS work natively. Upstream stays
+the hardware project and the imitation learning path.
 
 ---
 
@@ -27,6 +28,7 @@ A standard ROS 2 autonomy stack on the XLeRobot two-wheel base:
 - `diff_drive_controller` for odometry and TF, SLAM and Nav2 - working on the real robot
 - Both SO-101 arms and the head: calibration, model, controllers, MoveIt 2 (phase 3)
 - Isaac ROS cuVSLAM / nvblox / cuMotion where they earn their place (phase 4)
+- MCP for agent-based orchestration (phase 5 or something)
 
 ## Target hardware
 
@@ -37,10 +39,9 @@ A standard ROS 2 autonomy stack on the XLeRobot two-wheel base:
 | Compute, deploy | Jetson Orin NX, JetPack 7.2 |
 | Compute, dev | x86-64 + NVIDIA GPU, Ubuntu 24.04 |
 | ROS | Jazzy Jalisco |
-| Sensors | undecided, have a Velodyne VLP-16 and an Orbbec Gemini, a RealSense D435i/D455 is the likely answer for cuVSLAM, see [ARCHITECTURE §5](ARCHITECTURE.md#5-perception-still-open) |
+| Sensors | LDROBOT LD19 lidar for mapping. Perception undecided, see [ARCHITECTURE §5](ARCHITECTURE.md#5-perception-still-open) |
 
-Jazzy because Isaac ROS 4.0 dropped Humble. If you want cuVSLAM and nvblox, the distro is
-picked for you.
+Only Jazzy is supported, since Isaac ROS 4.0 only supports that.
 
 ---
 
@@ -207,4 +208,4 @@ rejected, but the Nav2 tuning and safety patterns are directly useful.
 
 ## License
 
-Apache-2.0, same as upstream XLeRobot.
+Apache-2.0
