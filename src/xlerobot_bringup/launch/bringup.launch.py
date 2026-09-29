@@ -117,12 +117,26 @@ def generate_launch_description():
     bus2_port = LaunchConfiguration("bus2_port")
     use_mock_hardware = LaunchConfiguration("use_mock_hardware")
     use_sim = LaunchConfiguration("use_sim")
+    # Off by default even under use_sim:=true, opt in with use_sim_time:=true. Tried tying it
+    # to use_sim (2026-09-27): the idea was that the Isaac twin publishes /clock, and without
+    # use_sim_time the controllers pace themselves against the wall clock while the twin's
+    # physics stepping - especially with its GUI actually rendering the viewport - does not
+    # track 1:1 with it, so a joint_trajectory_controller path-tolerance check sees that as a
+    # tracking error and aborts. Tested worse, not better: with use_sim_time:=true,
+    # controller_manager's own controller activation started timing out
+    # ("Switch controller timed out after 5 seconds!") before anything could even run, so the
+    # twin's /clock is not steady/fast enough for that handshake, at least with the GUI open.
+    # Root cause of the trajectory aborts is still open, see docs/sim-twin.md.
+    use_sim_time = LaunchConfiguration("use_sim_time")
     teleop = LaunchConfiguration("teleop")
     with_head = LaunchConfiguration("with_head")
     with_arms = LaunchConfiguration("with_arms")
     torque_off = LaunchConfiguration("torque_off")
     arm_controllers = PythonExpression([
         "'", with_arms, "' == 'true' and ('", torque_off, "' == 'false' or '", use_sim, "' == 'true')",
+    ])
+    head_controller_condition = PythonExpression([
+        "'", with_head, "' == 'true' and ('", torque_off, "' == 'false' or '", use_sim, "' == 'true')",
     ])
     record = LaunchConfiguration("record")
     foxglove = LaunchConfiguration("foxglove")
@@ -153,6 +167,8 @@ def generate_launch_description():
         DeclareLaunchArgument("bus2_port", default_value="/dev/xle-bus2"),
         DeclareLaunchArgument("use_mock_hardware", default_value="false"),
         DeclareLaunchArgument("use_sim", default_value="false"),
+        # see the module-level use_sim_time comment above
+        DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("teleop", default_value="false"),
         # off by default: bus1 (head pan/tilt) isn't wired on a base-only
         # robot, see xlerobot.urdf.xacro. Flip on once the head is plugged in.
@@ -161,8 +177,9 @@ def generate_launch_description():
         # with_arms:=true adds their joints to ros2_control (real buses, or use
         # use_mock_hardware:=true to see the model). Controllers come with phase 3.
         DeclareLaunchArgument("with_arms", default_value="false"),
-        # torque stays off on the arms and head (states only) until they are calibrated
-        DeclareLaunchArgument("torque_off", default_value="true"),
+        # Torqued and commandable by default now that both arms and the head are calibrated,
+        # live-tested, and MoveIt2-integrated. Pass torque_off:=true for a states-only bringup.
+        DeclareLaunchArgument("torque_off", default_value="false"),
         DeclareLaunchArgument("record", default_value="false"),
         DeclareLaunchArgument("foxglove", default_value="false"),
         DeclareLaunchArgument("cameras", default_value="false"),
@@ -177,12 +194,12 @@ def generate_launch_description():
         Node(
             package="robot_state_publisher",
             executable="robot_state_publisher",
-            parameters=[{"robot_description": robot_description}],
+            parameters=[{"robot_description": robot_description, "use_sim_time": use_sim_time}],
         ),
         Node(
             package="controller_manager",
             executable="ros2_control_node",
-            parameters=[{"robot_description": robot_description}, controllers_yaml],
+            parameters=[{"robot_description": robot_description, "use_sim_time": use_sim_time}, controllers_yaml],
             output="screen",
         ),
         Node(
@@ -208,6 +225,13 @@ def generate_launch_description():
             for name in ("left_arm_controller", "right_arm_controller",
                          "left_gripper_controller", "right_gripper_controller")
         ],
+        # Same condition shape as the arm controllers above, gated on with_head instead.
+        Node(
+            package="controller_manager",
+            executable="spawner",
+            arguments=["head_controller"],
+            condition=IfCondition(head_controller_condition),
+        ),
 
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(teleop_launch_file),

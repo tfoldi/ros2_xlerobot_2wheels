@@ -243,6 +243,18 @@ afterward.
   against this specific robot.
 - The arm drive gains (`ARM_GAINS`) are a first guess: the simulated arms hold the rest pose with
   about 0.02 rad of gravity sag, and nothing is tuned to the real servos.
+- **A real trajectory move (not just holding a pose) reliably aborts with `PATH_TOLERANCE_VIOLATED`**
+  when the Isaac Sim GUI is open and its viewport is actually rendering: the joint_trajectory_controller
+  in `xlerobot_bringup` paces itself against wall-clock time, and physics stepping under GUI render load
+  does not track 1:1 with it, so the arm falls too far behind where the trajectory expects it. Planning,
+  IK/FK and the collision-refusal check are unaffected - only closed-loop trajectory execution against the
+  live twin. Tried `use_sim_time:=true` on `bringup.launch.py` (2026-09-27, wired but off by default,
+  opt in per run) expecting the controllers to pace off the twin's own `/clock` instead: made it worse,
+  not better - `controller_manager`'s own controller activation started timing out before anything could
+  run, meaning the twin's `/clock` isn't steady/fast enough for that handshake with the GUI open. Not
+  reproduced running the twin headless in earlier sessions. Root cause open; the real robot doesn't have
+  this problem (real time is real time), so arm controller testing moved there instead of chasing this
+  further in sim.
 
 ## MoveIt against the twin
 

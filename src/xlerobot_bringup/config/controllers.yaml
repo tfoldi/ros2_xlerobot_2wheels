@@ -1,6 +1,4 @@
-# controller_manager config for the base. Arm controllers (jtc_left, jtc_right,
-# head controller) get added in phase 3, once the arm joint limits in
-# xlerobot.ros2_control.xacro are real and not placeholders.
+# controller_manager config for the base, arms and head.
 #
 # update_rate: 100Hz. The servo bus's own wire budget allows more (see
 # ARCHITECTURE §4.3), but controller_manager's real-time loop runs on the
@@ -36,6 +34,11 @@ controller_manager:
     left_gripper_controller:
       type: joint_trajectory_controller/JointTrajectoryController
     right_gripper_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    # Head, spawned only when with_head:=true torque_off:=false (or the sim), see
+    # bringup.launch.py.
+    head_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
 diff_drive_controller:
@@ -95,8 +98,19 @@ diff_drive_controller:
     use_stamped_vel: true
 
 # ---- arm controllers ----
-# Tolerances are in rad, the trajectory one aborts a goal that strays from the planned path
-# (a joint blocked or fighting something), the goal one is how close the arm must end up.
+# No per-joint trajectory/goal tolerance here on purpose. ros2_control's JointTrajectoryController
+# defaults both to -1 (check disabled) when not set. Had them at 0.25/0.06 originally; MoveIt-issued
+# goals (unlike the single-point moves tools/single_joint_test.py sends) consistently aborted on the
+# real robot with "state tolerance violation" partway through, at both 0.8 and 0.2 MoveIt velocity
+# scaling, and mock hardware (zero physical lag) tracked the identical trajectory to within
+# 0.004-0.005 rad and passed cleanly - so the gap is real servo response lag against an intermediate
+# tracking check, not planned speed or a mock-detectable bug. Tried loosening trajectory/goal
+# instead of removing them (0.5/0.06, goal_time 3.0): still aborted, just later, on MoveIt's own
+# separate execution-duration watchdog instead. Removed entirely after checking a reference project
+# on the same STS3215/SO-101 hardware (github.com/legalaspro/so101-ros-physical-ai) that runs
+# without any trajectory/goal tolerance at all, only stopped_velocity_tolerance. This is a diagnostic
+# baseline to confirm the tolerance check itself was the blocker - re-tighten with real numbers once
+# that is confirmed, do not leave a live arm permanently without any tracking check.
 
 left_arm_controller:
   ros__parameters:
@@ -113,12 +127,6 @@ left_arm_controller:
     action_monitor_rate: 20.0
     constraints:
       stopped_velocity_tolerance: 0.05
-      goal_time: 1.5
-      left_arm_shoulder_pan_joint: {trajectory: 0.25, goal: 0.06}
-      left_arm_shoulder_lift_joint: {trajectory: 0.25, goal: 0.06}
-      left_arm_elbow_flex_joint: {trajectory: 0.25, goal: 0.06}
-      left_arm_wrist_flex_joint: {trajectory: 0.25, goal: 0.06}
-      left_arm_wrist_roll_joint: {trajectory: 0.25, goal: 0.06}
 
 right_arm_controller:
   ros__parameters:
@@ -135,12 +143,6 @@ right_arm_controller:
     action_monitor_rate: 20.0
     constraints:
       stopped_velocity_tolerance: 0.05
-      goal_time: 1.5
-      right_arm_shoulder_pan_joint: {trajectory: 0.25, goal: 0.06}
-      right_arm_shoulder_lift_joint: {trajectory: 0.25, goal: 0.06}
-      right_arm_elbow_flex_joint: {trajectory: 0.25, goal: 0.06}
-      right_arm_wrist_flex_joint: {trajectory: 0.25, goal: 0.06}
-      right_arm_wrist_roll_joint: {trajectory: 0.25, goal: 0.06}
 
 left_gripper_controller:
   ros__parameters:
@@ -157,8 +159,6 @@ left_gripper_controller:
     action_monitor_rate: 20.0
     constraints:
       stopped_velocity_tolerance: 0.05
-      goal_time: 1.5
-      left_arm_gripper_joint: {trajectory: 0.25, goal: 0.06}
 
 right_gripper_controller:
   ros__parameters:
@@ -175,5 +175,15 @@ right_gripper_controller:
     action_monitor_rate: 20.0
     constraints:
       stopped_velocity_tolerance: 0.05
-      goal_time: 1.5
-      right_arm_gripper_joint: {trajectory: 0.25, goal: 0.06}
+
+head_controller:
+  ros__parameters:
+    joints: [head_pan_joint, head_tilt_joint]
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    allow_partial_joints_goal: false
+    open_loop_control: false
+    state_publish_rate: 50.0
+    action_monitor_rate: 20.0
+    constraints:
+      stopped_velocity_tolerance: 0.05

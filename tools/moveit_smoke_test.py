@@ -30,7 +30,12 @@ from sensor_msgs.msg import JointState
 ARM_JOINTS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"]
 REST = {"shoulder_pan": 0.0, "shoulder_lift": 2.6, "elbow_flex": -3.0, "wrist_flex": 0.0,
         "wrist_roll": 0.0, "gripper": 0.35}
-TOLERANCE = 0.05  # rad, what the trajectory controllers are held to (goal tolerance 0.06)
+# rad. The servos run with I=0 (matches LeRobot's own tuning, P=16/D=43/I=0 - not misconfigured),
+# so a pure P/D position loop has an inherent small steady-state error under any holding load that
+# never closes no matter how long it holds - confirmed live, up to ~0.06 rad on some joints. 0.08
+# gives that margin while still catching a real miss (the pre-fix bug this test caught produced
+# 0.1-0.8 rad errors, well outside this).
+TOLERANCE = 0.08
 
 
 class SmokeTest(Node):

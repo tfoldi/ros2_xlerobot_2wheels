@@ -10,8 +10,22 @@ Visualization Manager:
     - Class: moveit_rviz_plugin/MotionPlanning
       Name: MotionPlanning
       Enabled: true
+      # RViz's own hardcoded fallback is 0.1 if it can't read
+      # robot_description_planning.default_velocity/acceleration_scaling_factor from
+      # joint_limits.yaml (its own MoveIt helper node doesn't reliably pick up ambient
+      # parameters - the same class of issue as the kinematics.yaml one documented in
+      # move_group.launch.py's history). Pinning both here directly so the Planning tab's
+      # sliders default to full speed regardless.
+      Velocity_Scaling_Factor: 1
+      Acceleration_Scaling_Factor: 1
       Planning Request:
         Planning Group: left_arm
+        Query Goal State: true
+        Query Start State: false
+        # A live session had this at 20 (meters) - ~15-20x the whole robot, rendering far too
+        # large to see/grab. 0 ("auto") also failed to show anything for the user, so pinning
+        # an explicit, reasonable size instead (robot is ~1.2m tall).
+        Interactive Marker Size: 0.3
       Scene Robot:
         Robot Alpha: 0.5
         Show Scene Robot: true

@@ -1,7 +1,7 @@
 # Velocity limits come from the URDF (arms.joints max_velocity in robot_dimensions.yaml), MoveIt
 # needs the acceleration ones for time parametrization. Low on purpose while the arms are new.
-default_velocity_scaling_factor: 0.8
-default_acceleration_scaling_factor: 0.8
+default_velocity_scaling_factor: 0.3
+default_acceleration_scaling_factor: 0.3
 
 joint_limits:
   left_arm_shoulder_pan_joint:
@@ -38,5 +38,11 @@ joint_limits:
     has_acceleration_limits: true
     max_acceleration: 1.0
   right_arm_gripper_joint:
+    has_acceleration_limits: true
+    max_acceleration: 1.0
+  head_pan_joint:
+    has_acceleration_limits: true
+    max_acceleration: 1.0
+  head_tilt_joint:
     has_acceleration_limits: true
     max_acceleration: 1.0

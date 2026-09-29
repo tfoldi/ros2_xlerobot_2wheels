@@ -116,11 +116,11 @@
           <xacro:sts_position_joint name="head_pan_joint"  id="7"
               lower="${min(pm * h['pan_limit_lower'], pm * h['pan_limit_upper'])}"
               upper="${max(pm * h['pan_limit_lower'], pm * h['pan_limit_upper'])}"
-              center="${h['pan_zero_step']}" read_only="${torque_off}"/>
+              center="${h['pan_zero_step']}" rate_limit="${1.25 * h['max_velocity']}" read_only="${torque_off}"/>
           <xacro:sts_position_joint name="head_tilt_joint" id="8"
               lower="${min(tm * h['tilt_limit_lower'], tm * h['tilt_limit_upper'])}"
               upper="${max(tm * h['tilt_limit_lower'], tm * h['tilt_limit_upper'])}"
-              center="${h['tilt_zero_step']}" read_only="${torque_off}"/>
+              center="${h['tilt_zero_step']}" rate_limit="${1.25 * h['max_velocity']}" read_only="${torque_off}"/>
         </xacro:if>
       </ros2_control>
     </xacro:if>

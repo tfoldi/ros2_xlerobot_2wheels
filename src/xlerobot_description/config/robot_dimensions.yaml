@@ -119,6 +119,9 @@ xlerobot:
     pan_direction: -1
     tilt_zero_step: 2047
     tilt_direction: -1
+    # rad/s, same value and same reasoning as the arms' max_velocity (see below) - the servos
+    # are the same STS3215 family, tracking is now well-characterized (see project history).
+    max_velocity: 0.8
 
   # --- arms, two SO-101 on the cart top, IDs 1-6 (left on bus1, right on bus2) ---
   # The arm meshes, links and joints are those in simulation/xlerobot/xlerobot.urdf
@@ -154,10 +157,14 @@ xlerobot:
     #   decreases. The driver reports (center - step), so -1 is its own direction, and for +1
     #   so101_arm.xacro reverses the joint axis and mirrors the limits, which gives the same
     #   pose. Checked by moving every joint by hand in Rerun.
-    # max_velocity: rad/s, the limit planners and trajectories plan with, low on purpose while the
-    #   arms are new. servo_speed_limit_steps: the servos' own cap, in steps/s (4096 per turn),
-    #   which a large jump of the command cannot exceed whatever the trajectory says. The cap
-    #   applies to every commanded position joint on the bus, the head too.
+    # max_velocity: rad/s, the limit planners and trajectories plan with. Was 0.5, deliberately low
+    #   while the arms were new; raised to 0.8 (2026-09-27) once real capability was characterized
+    #   (see the ACC/streaming fix in sts_hardware_interface - the real bottleneck was a firmware
+    #   bug making the servo ignore Speed entirely, not that 0.5 rad/s was near the servo's actual
+    #   limit). Stays comfortably under servo_speed_limit_steps below (600 steps/s =~ 0.92 rad/s).
+    #   servo_speed_limit_steps: the servos' own cap, in steps/s (4096 per turn), which a large jump
+    #   of the command cannot exceed whatever the trajectory says. The cap applies to every
+    #   commanded position joint on the bus, the head too.
     servo_speed_limit_steps: 600
     # limit_margin: rad added to both ends of every arm joint's limits, in the model and in
     #   ros2_control. The upstream limits are another arm's stops, and the folded rest pose sits
@@ -175,12 +182,12 @@ xlerobot:
     #   is generated so that nothing this pose touches counts as a collision.
     folded_pose: {shoulder_pan: 0.15, shoulder_lift: 2.75, elbow_flex: -3.17, wrist_flex: 0.0, wrist_roll: 0.0, gripper: 0.37}
     joints:
-      shoulder_pan:  {zero_step: {left: 2057, right: 2075}, direction:  1, max_velocity: 0.5, lower: -2.16,      upper: 2.16}
-      shoulder_lift: {zero_step: {left: 3197, right: 3070}, direction: -1, max_velocity: 0.5, lower: -0.22,      upper: 3.37}
-      elbow_flex:    {zero_step: {left:  989, right: 1056}, direction:  1, max_velocity: 0.5, lower: -0.22,      upper: 3.14}
-      wrist_flex:    {zero_step: {left: 1978, right: 1991}, direction:  1, max_velocity: 0.5, lower: -1.6580628, upper: 1.6580627}
-      wrist_roll:    {zero_step: {left: 2079, right: 2018}, direction: -1, max_velocity: 0.5, lower: -2.7438473, upper: 2.8412063}
-      gripper:       {zero_step: {left: 1802, right: 1766}, direction:  1, max_velocity: 0.5, lower: -0.374533,  upper: 1.7453292}
+      shoulder_pan:  {zero_step: {left: 2057, right: 2075}, direction:  1, max_velocity: 0.8, lower: -2.16,      upper: 2.16}
+      shoulder_lift: {zero_step: {left: 3197, right: 3070}, direction: -1, max_velocity: 0.8, lower: -0.22,      upper: 3.37}
+      elbow_flex:    {zero_step: {left:  989, right: 1056}, direction:  1, max_velocity: 0.8, lower: -0.22,      upper: 3.14}
+      wrist_flex:    {zero_step: {left: 1978, right: 1991}, direction:  1, max_velocity: 0.8, lower: -1.6580628, upper: 1.6580627}
+      wrist_roll:    {zero_step: {left: 2079, right: 2018}, direction: -1, max_velocity: 0.8, lower: -2.7438473, upper: 2.8412063}
+      gripper:       {zero_step: {left: 1802, right: 1766}, direction:  1, max_velocity: 0.8, lower: -0.374533,  upper: 1.7453292}
 
   # --- LD19 2D lidar, upside down under the second basket ---
   # x, y: measured, centred and in line with the drive axle, base_link frame (front is +x).
