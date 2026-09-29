@@ -9,8 +9,8 @@ setup(
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
-        ("share/" + package_name + "/launch", ["launch/teleop.launch.py"]),
-        ("share/" + package_name + "/config", ["config/joystick.yaml", "config/twist_mux.yaml"]),
+        ("share/" + package_name + "/launch", ["launch/teleop.launch.py", "launch/mcp_presence.launch.py"]),
+        ("share/" + package_name + "/config", ["config/joystick.yaml", "config/twist_mux.yaml", "config/mcp_presence.yaml"]),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
@@ -22,6 +22,7 @@ setup(
     entry_points={
         "console_scripts": [
             "safety_supervisor = xlerobot_teleop.safety_supervisor:main",
+            "mcp_presence_guard = xlerobot_teleop.mcp_presence_guard:main",
         ],
     },
 )
