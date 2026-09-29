@@ -16,7 +16,7 @@ import sys
 import time
 
 import rclpy
-from geometry_msgs.msg import Point, Pose
+from geometry_msgs.msg import Point, Pose, Vector3
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import (
     BoundingVolume, Constraints, MotionPlanRequest, MoveItErrorCodes,
@@ -51,7 +51,7 @@ def position_goal_request(group, tip_link, frame, point, scaling):
     constraint = PositionConstraint()
     constraint.header.frame_id = frame
     constraint.link_name = tip_link
-    constraint.target_point_offset = Point(x=0.0, y=0.0, z=0.0)
+    constraint.target_point_offset = Vector3(x=0.0, y=0.0, z=0.0)  # Vector3, not Point - PositionConstraint.msg's field type
     sphere = SolidPrimitive(type=SolidPrimitive.SPHERE, dimensions=[TOLERANCE_M])
     constraint.constraint_region = BoundingVolume(
         primitives=[sphere],

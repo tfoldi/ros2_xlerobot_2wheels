@@ -1,7 +1,7 @@
-# mcp_presence_guard config. Button number is for a generic Xbox layout, same caveat as
-# joystick.yaml: check against upstream's software/examples/calibrate_gamepad.py mapping before
-# trusting this, controller layouts vary by driver.
+# mcp_presence_guard config. presence_button confirmed against the actual gamepad's /joy output
+# (RB -> buttons[7] on this controller/driver, not the generic-Xbox-layout guess of 5) - if you
+# swap controllers, re-check with `ros2 topic echo /joy` before trusting this.
 mcp_presence_guard:
   ros__parameters:
-    presence_button: 5   # right bumper - deliberately not joystick.yaml's enable_button (4)
+    presence_button: 7   # RB - deliberately not joystick.yaml's enable_button (4, left bumper)
     timeout_sec: 5.0

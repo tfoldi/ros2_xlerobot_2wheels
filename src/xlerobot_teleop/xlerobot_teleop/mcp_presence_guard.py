@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Presence/heartbeat watchdog for agent-issued (MCP) motion commands.
 
-teleop's own deadman (joystick.yaml's enable_button, left bumper) only guards commands sent
+teleop's own deadman (joystick.yaml's enable_button, "left bumper") only guards commands sent
 while a human is actively driving with the stick. Once an agent is the one issuing motion
 commands, nothing requires a human to still be watching - this closes that gap: a human holds or
-repeatedly taps a *different* button (config'd in mcp_presence.yaml, default button 5, right
-bumper - deliberately not the drive-enable button, the two concerns don't overlap) and
+repeatedly taps a *different* button (config'd in mcp_presence.yaml, default button 7, RB on the
+gamepad this was tested against - confirmed via `ros2 topic echo /joy`, not a generic-Xbox-layout
+guess; deliberately not the drive-enable button, the two concerns don't overlap) and
 /mcp_presence_ok stays true only while that's recent. MCP motion tools must check this before
 accepting a goal and keep checking it while one is in flight, same as any other watchdog here.
 

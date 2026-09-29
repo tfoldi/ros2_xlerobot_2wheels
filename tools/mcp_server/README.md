@@ -20,6 +20,14 @@ source ~/venvs/xlerobot-mcp/bin/activate
 pip install -r tools/mcp_server/requirements.txt
 ```
 
+If `import cv2` fails with a NumPy ABI error ("compiled using NumPy 1.x cannot be run in NumPy
+2.x") - confirmed to happen when a newer numpy is already installed in `~/.local` or similar,
+which `--system-site-packages` inherits and takes priority over the apt-installed cv2's expected
+ABI: `pip install "numpy<2"` inside this venv (shadows the inherited one with a venv-local
+version, doesn't touch anything outside it). Ignore any `pip` dependency-conflict warning this
+prints about unrelated packages elsewhere on the system (e.g. `rerun-sdk`) - those aren't used
+here.
+
 Register in `.mcp.json` at the repo root (gitignored - it only ever holds a machine-specific
 absolute path):
 
@@ -57,10 +65,11 @@ Read-only tools (`list_positions`, `list_waypoints`, `get_joint_states`, `get_ro
 
 Every motion tool checks `/mcp_presence_ok` before accepting a goal and keeps checking it while
 one is in flight - see `xlerobot_teleop/mcp_presence_guard.py` and
-`xlerobot_teleop/config/mcp_presence.yaml`. Default: hold or tap the right bumper (button 5 on a
-generic Xbox layout - check against upstream's `calibrate_gamepad.py` mapping) at least once
-every 5 seconds. A lapse mid-motion cancels the goal and, for an arm move, e-stops that arm's
-bus; for navigation, stops the base and cancels the Nav2 goal.
+`xlerobot_teleop/config/mcp_presence.yaml`. Default: hold or tap RB (button 7 - confirmed against
+the actual gamepad via `ros2 topic echo /joy`, not a generic-layout guess; if you swap
+controllers, re-check the same way) at least once every 5 seconds. A lapse mid-motion cancels the
+goal and, for an arm move, e-stops that arm's bus; for navigation, stops the base and cancels the
+Nav2 goal.
 
 `estop`/`release_estop` are never gated - always callable, including to recover from a
 `PresenceLost` error surfaced by another tool.

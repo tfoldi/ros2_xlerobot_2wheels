@@ -156,7 +156,13 @@ class XleRobotBridge(Node):
     def _run_move_group(self, request, group, timeout=60.0):
         self._require_presence()
         with self.motion_lock:
-            if not self.move_group.server_is_ready():
+            # server_is_ready() alone is an instant, no-wait check - right after the bridge
+            # starts (before this client has discovered move_action at all) it false-negatives
+            # even though move_group is genuinely up, since discovery takes a moment. Bounded
+            # wait instead - only blocks the calling (tool) thread via a plain sleep loop, safe
+            # to call alongside the background executor spinning this node (confirmed: rclpy's
+            # own wait_for_server() does no spinning of its own).
+            if not self.move_group.wait_for_server(timeout_sec=5.0):
                 raise MoveError("/move_action not available - is move_group running?")
             options = PlanningOptions(plan_only=False)
             goal_msg = MoveGroup.Goal(request=request, planning_options=options)
@@ -351,7 +357,14 @@ def get_bridge():
     """Lazily start rclpy + the bridge node + its background spin thread, once per process.
     FastMCP dispatches tool calls on worker threads, so two calls can race in here on the very
     first request - the lock makes the double-init (rclpy.init() twice) impossible rather than
-    just unlikely."""
+    just unlikely.
+
+    The brief sleep after starting the spin thread is a one-time cost, paid only by whichever
+    tool call happens to be first: DDS discovery of the rest of the ROS graph (bringup's
+    /joint_states, /mcp_presence_ok, ...) isn't instant, and a caller landing before it settles
+    would see empty caches - not a hang, just a wrong-looking "nothing is alive yet" answer from
+    the very first call. Confirmed live: presence_ok and joint_positions were both correctly
+    populated within 1s of node creation when given the chance to settle before being read."""
     global _bridge, _executor
     with _init_lock:
         if _bridge is None:
@@ -360,4 +373,5 @@ def get_bridge():
             _executor = rclpy.executors.SingleThreadedExecutor()
             _executor.add_node(_bridge)
             threading.Thread(target=_executor.spin, daemon=True).start()
+            time.sleep(1.0)
         return _bridge
