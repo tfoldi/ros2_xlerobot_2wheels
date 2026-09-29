@@ -28,6 +28,13 @@ __pycache__/
 # recorded arm trajectories, tools/record_trajectory.py - not curated like saved_positions.yaml
 /trajectories/
 
+# camera frames, tools/capture_image.py - ephemeral, not curated
+/captures/
+
+# machine-specific MCP server registration (absolute paths to a per-user venv) - see
+# tools/mcp_server/README.md for the .mcp.json snippet to create your own
+/.mcp.json
+
 # slam_toolbox pose graphs, several MB each, kept on the robot
 /src/xlerobot_navigation/maps/*.posegraph
 /src/xlerobot_navigation/maps/*.data

@@ -12,7 +12,7 @@ import sys
 import rclpy
 
 import position_store
-from goto_position import GotoPosition
+from goto_position import GotoPosition, MoveError
 
 
 def main():
@@ -22,7 +22,10 @@ def main():
     parser.add_argument("--scaling", type=float, default=0.0, help="0 = joint_limits.yaml default")
     args = parser.parse_args()
 
-    entries = [(name, position_store.get(name)) for name in args.names]
+    try:
+        entries = [(name, position_store.get(name)) for name in args.names]
+    except position_store.NotFoundError as e:
+        sys.exit(str(e))
     all_joints = [j for _, entry in entries for j in entry["joints"]]
 
     forever = args.loop == "forever"
@@ -32,9 +35,8 @@ def main():
 
     rclpy.init()
     node = GotoPosition()
-    node.wait_ready(all_joints)
-
     try:
+        node.wait_ready(all_joints)
         iteration = 0
         while forever or iteration < count:
             iteration += 1
@@ -44,9 +46,11 @@ def main():
                 node.move(entry["group"], entry["joints"], args.scaling)
     except KeyboardInterrupt:
         print("\nstopped")
-
-    node.destroy_node()
-    rclpy.shutdown()
+    except MoveError as e:
+        sys.exit(str(e))
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == "__main__":
