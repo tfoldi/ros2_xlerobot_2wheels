@@ -363,8 +363,11 @@ def get_bridge():
     tool call happens to be first: DDS discovery of the rest of the ROS graph (bringup's
     /joint_states, /mcp_presence_ok, ...) isn't instant, and a caller landing before it settles
     would see empty caches - not a hang, just a wrong-looking "nothing is alive yet" answer from
-    the very first call. Confirmed live: presence_ok and joint_positions were both correctly
-    populated within 1s of node creation when given the chance to settle before being read."""
+    the very first call. 1.0s was enough on a laptop with nothing else competing for CPU; on a
+    Jetson Orin NX also running cameras + mock hardware + move_group, discovery sometimes took
+    longer than that (confirmed live: joint_states came through by 1s but /mcp_presence_ok
+    hadn't yet) - 2.5s gave consistent results there. Same one-time cost either way, paid once
+    per server process lifetime."""
     global _bridge, _executor
     with _init_lock:
         if _bridge is None:
@@ -373,5 +376,5 @@ def get_bridge():
             _executor = rclpy.executors.SingleThreadedExecutor()
             _executor.add_node(_bridge)
             threading.Thread(target=_executor.spin, daemon=True).start()
-            time.sleep(1.0)
+            time.sleep(2.5)
         return _bridge
