@@ -74,6 +74,27 @@ Nav2 goal.
 `estop`/`release_estop` are never gated - always callable, including to recover from a
 `PresenceLost` error surfaced by another tool.
 
+## Audit log and replay
+
+Every tool call - success or failure - is appended to `logs/mcp_calls.jsonl` (gitignored,
+runtime data) via `call_log.py`: timestamp, tool name, arguments, the calling agent's own
+`reason` argument (every tool takes one, optional but always worth filling in), outcome, and
+timing. This is the answer to "what did the agent actually do, and why" for reviewing a session
+after the fact.
+
+Replay a captured log against a live server:
+
+```bash
+python3 tools/mcp_server/replay_log.py logs/mcp_calls.jsonl              # replay everything
+python3 tools/mcp_server/replay_log.py logs/mcp_calls.jsonl --dry-run    # just print, don't call
+python3 tools/mcp_server/replay_log.py logs/mcp_calls.jsonl --limit 5    # first 5 entries only
+```
+
+This replays the *commands*, not their prior outcomes, through the exact same tool surface -
+every real safety gate (presence, estop) applies exactly as it did the first time, so a motion
+call that succeeded live will be correctly refused on replay if nothing is holding the presence
+button now.
+
 ## Verification
 
 - Read-only tools first, no presence button held - `get_status`, `list_positions`,

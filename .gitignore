@@ -35,6 +35,9 @@ __pycache__/
 # tools/mcp_server/README.md for the .mcp.json snippet to create your own
 /.mcp.json
 
+# MCP tool-call audit log, tools/mcp_server/call_log.py - runtime artifact, not curated
+/logs/
+
 # slam_toolbox pose graphs, several MB each, kept on the robot
 /src/xlerobot_navigation/maps/*.posegraph
 /src/xlerobot_navigation/maps/*.data

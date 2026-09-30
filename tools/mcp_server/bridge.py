@@ -378,3 +378,20 @@ def get_bridge():
             threading.Thread(target=_executor.spin, daemon=True).start()
             time.sleep(2.5)
         return _bridge
+
+
+def shutdown():
+    """Call once, right before process exit (see server.py) - not needed if get_bridge() was
+    never called (nothing to shut down). Tears down the executor/node/rclpy context cleanly, but
+    a clean rclpy.shutdown() alone is NOT enough to avoid a crash on exit here: some rmw_fastrtps
+    background thread doesn't finish joining before CPython's own interpreter teardown starts,
+    which aborts the process ("terminate called without an active exception") even after this
+    function returns successfully - confirmed reproducible with a textbook-correct explicit
+    shutdown sequence, not a bug in this cleanup. Caller must follow this with os._exit() to skip
+    that teardown entirely; every tool result is already delivered by this point regardless, so
+    nothing is lost by skipping it."""
+    if _bridge is None:
+        return
+    _executor.shutdown()
+    _bridge.destroy_node()
+    rclpy.shutdown()
