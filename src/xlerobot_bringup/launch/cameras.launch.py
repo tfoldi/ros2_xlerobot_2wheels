@@ -40,7 +40,12 @@ def _camera_nodes(context, *args, **kwargs):
                 "framerate": float(cfg["fps"]),
                 "pixel_format": cfg["pixel_format"],
                 "camera_name": name,
-                "camera_frame_id": cfg.get("frame_id", f"{name}_camera_optical_frame"),
+                # usb_cam_node_exe's actual parameter is "frame_id", not "camera_frame_id" -
+                # confirmed via `ros2 param describe`: the wrong key was being silently ignored
+                # (ROS2 doesn't error on an unused parameter dict entry), so every camera_info
+                # header read usb_cam's own hardcoded default ("default_cam") instead of the real
+                # URDF optical frame name below, regardless of what cameras.yaml said.
+                "frame_id": cfg.get("frame_id", f"{name}_camera_optical_frame"),
                 "camera_info_url": "",
                 "image_raw.ffmpeg.encoder": cfg["encoder"],
                 "image_raw.ffmpeg.encoder_av_options": cfg["encoder_options"],
