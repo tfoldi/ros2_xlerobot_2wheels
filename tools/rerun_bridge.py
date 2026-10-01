@@ -44,6 +44,7 @@ import tempfile
 import rclpy
 import rerun as rr
 import rerun.blueprint as rrb
+import tf2_ros
 from geometry_msgs.msg import PoseStamped, TwistStamped
 import numpy as np
 from nav2_msgs.msg import ParticleCloud
@@ -51,7 +52,7 @@ from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from rerun.blueprint.components import PlayState
-from sensor_msgs.msg import JointState, LaserScan
+from sensor_msgs.msg import CameraInfo, JointState, LaserScan
 from std_msgs.msg import String
 from tf2_msgs.msg import TFMessage
 
@@ -113,7 +114,7 @@ def blueprint(cameras):
                 rrb.Spatial3DView(
                     name="Robot", origin="/",
                     contents=[
-                        "/xlerobot/**", "/transforms/**", "/world/**", "/lidar/**",
+                        "/xlerobot/**", "/transforms/**", "/world/**", "/lidar/**", "/cameras/**",
                         "- /xlerobot/collision_geometries/**"],
                     spatial_information=rrb.SpatialInformation(target_frame=ODOM_FRAME),
                     # from the front left and above, the whole robot with both arms and the
@@ -211,6 +212,46 @@ class RerunBridge(Node):
         self.video_started = set()
         if FFMPEGPacket is not None:
             self.create_timer(2.0, self.find_cameras)
+
+        # Camera intrinsics (rr.Pinhole), so the 3D view draws a frustum at each camera's real
+        # mounted pose and projects the live video stream through it - logged once per camera,
+        # as soon as both the intrinsics (camera_info) and the extrinsics (tf, base_link -> the
+        # camera's own optical frame) are available. Needs real calibration data to mean anything;
+        # before that, camera_info publishes the all-zeros placeholder usb_cam defaults to, which
+        # would draw a degenerate (zero-size) frustum - skipped below until fx/fy are non-zero.
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        self.pinhole_logged = set()
+        for name in CAMERAS:
+            self.create_subscription(
+                CameraInfo, f"cameras/{name}/camera_info",
+                lambda msg, name=name: self.on_camera_info(msg, name), qos_profile_sensor_data)
+
+    def on_camera_info(self, msg: CameraInfo, name):
+        if name in self.pinhole_logged:
+            return
+        fx, fy = msg.k[0], msg.k[4]
+        if fx <= 0.0 or fy <= 0.0:
+            return  # uncalibrated placeholder (all-zeros) - nothing real to draw yet
+        try:
+            tf = self.tf_buffer.lookup_transform(BASE_FRAME, msg.header.frame_id, rclpy.time.Time())
+        except tf2_ros.TransformException:
+            return  # static transform not received yet - camera_info keeps arriving, try again
+        v, q = tf.transform.translation, tf.transform.rotation
+        rr.log(
+            f"cameras/{name}",
+            rr.Transform3D(
+                translation=[v.x, v.y, v.z], rotation=rr.Quaternion(xyzw=[q.x, q.y, q.z, q.w]),
+                parent_frame=BASE_FRAME, child_frame=f"cameras/{name}"),
+            static=True)
+        rr.log(
+            f"cameras/{name}",
+            rr.Pinhole(
+                resolution=[msg.width, msg.height], focal_length=[fx, fy],
+                principal_point=[msg.k[2], msg.k[5]], camera_xyz=rr.ViewCoordinates.RDF),
+            static=True)
+        self.pinhole_logged.add(name)
+        self.get_logger().info(f"logged camera frustum for {name} (fx={fx:.1f}, fy={fy:.1f})")
 
     def set_time(self, header):
         stamp = stamp_seconds(header)
