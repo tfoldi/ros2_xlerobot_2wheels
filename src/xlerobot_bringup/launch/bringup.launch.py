@@ -9,12 +9,13 @@ be playing (Play pressed in the GUI, or app_utils.play() in a script) for
 its side of the ROS 2 bridge to actually publish/subscribe anything.
 
 teleop:=true also brings up xlerobot_teleop's joystick/twist_mux/safety
-supervisor stack (xlerobot_teleop/launch/teleop.launch.py), off by default
-so a plain bringup doesn't grab a joystick device or start the safety
-watchdog when nothing needs it. The watchdog engages e_stop until this
-bringup's own joint_state_broadcaster is actually publishing, so there's
-no real ordering issue bringing both up together this way, unlike running
-teleop.launch.py standalone before bringup is up.
+supervisor stack (xlerobot_teleop/launch/teleop.launch.py). On by default,
+since every real bringup needs the safety watchdog and a human-override
+path; pass teleop:=false for a states-only/no-joystick bringup (e.g. CI,
+or a headless box with no controller plugged in). The watchdog engages
+e_stop until this bringup's own joint_state_broadcaster is actually
+publishing, so there's no real ordering issue bringing both up together
+this way, unlike running teleop.launch.py standalone before bringup is up.
 
 record:=true records every topic to bags/<timestamp> (gitignored) for
 offline debugging, camera video as H.264 packets only (raw and the other
@@ -169,7 +170,7 @@ def generate_launch_description():
         DeclareLaunchArgument("use_sim", default_value="false"),
         # see the module-level use_sim_time comment above
         DeclareLaunchArgument("use_sim_time", default_value="false"),
-        DeclareLaunchArgument("teleop", default_value="false"),
+        DeclareLaunchArgument("teleop", default_value="true"),
         # off by default: bus1 (head pan/tilt) isn't wired on a base-only
         # robot, see xlerobot.urdf.xacro. Flip on once the head is plugged in.
         DeclareLaunchArgument("with_head", default_value="false"),

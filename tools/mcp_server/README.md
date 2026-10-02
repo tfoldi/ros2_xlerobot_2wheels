@@ -52,11 +52,12 @@ two `source` lines in `run.sh` to match your ROS install and venv location, and 
 ## Before any motion tool works
 
 1. Bringup with arms and cameras: `ros2 launch xlerobot_bringup bringup.launch.py with_arms:=true with_head:=true cameras:=true`
+   (`teleop:=true` is the default, so this already starts joy_node/twist_mux/safety_supervisor;
+   pass `teleop:=false` to skip it)
 2. `ros2 launch xlerobot_moveit_config move_group.launch.py`
 3. `ros2 launch xlerobot_navigation navigation.launch.py localization:=true` (needed for
    `goto_waypoint`/`save_waypoint`, not for arm-only tools)
-4. `ros2 launch xlerobot_teleop teleop.launch.py` (or a bare `ros2 run joy joy_node`) so `/joy`
-   exists, then `ros2 launch xlerobot_teleop mcp_presence.launch.py`
+4. `ros2 launch xlerobot_teleop mcp_presence.launch.py` (needs `/joy` already up from step 1)
 
 Read-only tools (`list_positions`, `list_waypoints`, `get_joint_states`, `get_robot_pose`,
 `get_status`, `capture_image`) work without step 4 - they don't move anything.
