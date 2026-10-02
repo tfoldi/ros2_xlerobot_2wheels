@@ -176,7 +176,13 @@ xlerobot:
     #   near their limits, the gripper closed at its limit), the same for both arms. The
     #   sim's arms start in it and MoveIt has it as the named state `rest`. The real arms rest
     #   a little differently, this one keeps clear of the hard stops.
-    rest_pose: {shoulder_pan: 0.0, shoulder_lift: 2.6, elbow_flex: -3.0, wrist_flex: 0.0, wrist_roll: 0.0, gripper: 0.35}
+    #   wrist_flex/wrist_roll: with lift/elbow folded this way, wrist_flex=0 wrist_roll=0 points
+    #   the wrist camera straight down at whatever is directly below the gripper (a desk, the
+    #   floor) - useless for seeing the robot's surroundings while idle. 1.3/1.5708 instead
+    #   points it up and out at the room (confirmed on real hardware, both arms, via
+    #   tools/capture_image.py - a wide view of the ceiling/walls instead of a close-up of
+    #   whatever's underneath).
+    rest_pose: {shoulder_pan: 0.0, shoulder_lift: 2.6, elbow_flex: -3.0, wrist_flex: 1.3, wrist_roll: 1.5708, gripper: 0.35}
     # folded_pose: the arms as they really lie when parked, folded to the hard stops (measured,
     #   the elbow at its stop). MoveIt must take it as a start state, the self-collision matrix
     #   is generated so that nothing this pose touches counts as a collision.
