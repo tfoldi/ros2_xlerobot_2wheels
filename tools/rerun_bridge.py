@@ -27,11 +27,13 @@ Camera video is taken from the ffmpeg_image_transport topics
 video stream, so nothing is decoded or re-encoded here. Cameras are found
 while running, so they can start after the bridge.
 
-The Logs tab has two sources: /rosout (every ROS2 node's log messages) and
-tools/mcp_server's own call_log.py audit trail (logs/mcp_calls.jsonl, tailed from
-disk - the MCP server has no ROS dependency, so this is a file read, not a
-subscription). Together they answer "what was the agent doing, and what did the
-stack say back" from one timeline.
+The Logs tab is two side-by-side panels sharing the same ros_time timeline: ROS2
+Log (/rosout, every node's log messages) and MCP Calls (tools/mcp_server's own
+call_log.py audit trail, logs/mcp_calls.jsonl, tailed from disk - the MCP server
+has no ROS dependency, so this is a file read, not a subscription). Each MCP
+entry shows the call, the agent's stated reason, and the result/error together,
+so "what was the agent doing, and what did the stack say back" reads next to
+"what was ROS2 saying at that same moment" without digging through two tools.
 
 Usage (bringup already running):
     python3 tools/rerun_bridge.py
@@ -146,7 +148,8 @@ def blueprint(cameras):
         rrb.Vertical(
             *([rrb.Horizontal(*camera_views(cameras))] if cameras else []),
             rrb.TimeSeriesView(name="Velocities", origin="/velocity"),
-            row_shares=[3, 1] if cameras else [1],
+            rrb.TextLogView(name="MCP Calls", origin="/logs/mcp"),
+            row_shares=[3, 1, 1.3] if cameras else [1, 1],
         ),
         column_shares=[3, 2],
         name="Main",
@@ -189,7 +192,11 @@ def blueprint(cameras):
         name="Odometry & Map",
     ))
 
-    tabs.append(rrb.TextLogView(name="Logs", origin="/logs"))
+    tabs.append(rrb.Horizontal(
+        rrb.TextLogView(name="ROS2 Log", origin="/logs/rosout"),
+        rrb.TextLogView(name="MCP Calls", origin="/logs/mcp"),
+        name="Logs",
+    ))
 
     return rrb.Blueprint(
         rrb.Tabs(*tabs, active_tab=0),
@@ -224,7 +231,11 @@ class RerunBridge(Node):
         self.joints = {}
         self.last_joint_transform_time = 0.0
         self.create_subscription(Log, "/rosout", self.on_rosout, QoSProfile(depth=100))
-        self.mcp_log_pos = 0
+        # start at the current end, not 0 - call_log.py's audit log is append-only and keeps
+        # every past session, so reading from the start on each bridge restart would replay
+        # old calls under their real (old) timestamps, dragging the recording's whole time
+        # range back to whenever the log began instead of showing only what's new.
+        self.mcp_log_pos = MCP_LOG_PATH.stat().st_size if MCP_LOG_PATH.is_file() else 0
         self.create_timer(MCP_LOG_POLL_PERIOD, self.poll_mcp_log)
         self.create_subscription(Odometry, "/diff_drive_controller/odom", self.on_odom, 20)
         self.create_subscription(
@@ -318,11 +329,19 @@ class RerunBridge(Node):
                 continue
             stamp = datetime.datetime.fromisoformat(entry["time"]).timestamp()
             rr.set_time("ros_time", timestamp=stamp)
-            level = rr.TextLogLevel.INFO if entry.get("ok") else rr.TextLogLevel.ERROR
-            text = f"{entry['tool']}({entry.get('args')}) [{entry.get('reason')}] -> "
-            text += "ok" if entry.get("ok") else f"ERROR: {entry.get('error')}"
-            text += f" ({entry.get('duration_s')}s)"
-            rr.log("logs/mcp", rr.TextLog(text, level=level))
+            ok = entry.get("ok")
+            level = rr.TextLogLevel.INFO if ok else rr.TextLogLevel.ERROR
+            # one line each for the call, why it was made, and what came back, so the three
+            # read as distinct fields rather than one run-on line - this is the whole point of
+            # call_log.py's record() (tool/args/reason/result/error), so the Logs tab should
+            # show it the same way, not flatten it.
+            text = (
+                f"CALL {entry['tool']}({entry.get('args')})\n"
+                f"  reason: {entry.get('reason')}\n"
+                f"  {'result' if ok else 'ERROR'}: {entry.get('result') if ok else entry.get('error')}"
+                f"  ({entry.get('duration_s')}s)"
+            )
+            rr.log(f"logs/mcp/{entry['tool']}", rr.TextLog(text, level=level))
 
     def set_time(self, header):
         stamp = stamp_seconds(header)
