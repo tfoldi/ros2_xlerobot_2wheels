@@ -102,7 +102,14 @@ def main():
             sys.exit("Nav2 is not up (no navigate_to_pose action server), start navigation.launch.py")
 
         goal = PoseStamped()
-        goal.header.frame_id = "map"  # identical to odom until there is localisation
+        # x0/y0/yaw0 came from /diff_drive_controller/odom, so the goal has to be published in
+        # that same frame. "map" looked tempting (it's what RViz/rerun_bridge.py show) but is
+        # only identical to odom with neither slam nor localization running - with slam:=true,
+        # map->odom is a real, non-identity correction, and labeling odom-frame numbers "map"
+        # sends the robot to the wrong point entirely (confirmed on hardware: a 0.3 m forward
+        # request drove ~0.6 m with a real heading change before hitting the overshoot cancel).
+        # Nav2 transforms a goal in any TF-connected frame, so "odom" is correct either way.
+        goal.header.frame_id = "odom"
         goal.header.stamp = node.get_clock().now().to_msg()
         goal.pose.position.x, goal.pose.position.y = gx, gy
         goal.pose.orientation.z, goal.pose.orientation.w = math.sin(yaw0 / 2), math.cos(yaw0 / 2)
