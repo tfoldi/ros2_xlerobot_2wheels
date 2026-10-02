@@ -27,6 +27,12 @@ Camera video is taken from the ffmpeg_image_transport topics
 video stream, so nothing is decoded or re-encoded here. Cameras are found
 while running, so they can start after the bridge.
 
+The Logs tab has two sources: /rosout (every ROS2 node's log messages) and
+tools/mcp_server's own call_log.py audit trail (logs/mcp_calls.jsonl, tailed from
+disk - the MCP server has no ROS dependency, so this is a file read, not a
+subscription). Together they answer "what was the agent doing, and what did the
+stack say back" from one timeline.
+
 Usage (bringup already running):
     python3 tools/rerun_bridge.py
     python3 tools/rerun_bridge.py --save run.rrd    # record to a file, no viewer
@@ -36,19 +42,22 @@ Usage (bringup already running):
 
 import argparse
 import colorsys
+import datetime
+import json
 import math
 import os
+import pathlib
 import signal
 import tempfile
 
 import rclpy
 import rerun as rr
 import rerun.blueprint as rrb
-import tf2_ros
 from geometry_msgs.msg import PoseStamped, TwistStamped
 import numpy as np
 from nav2_msgs.msg import ParticleCloud
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
+from rcl_interfaces.msg import Log
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from rerun.blueprint.components import PlayState
@@ -68,9 +77,19 @@ LIDAR_FRAME = "ldlidar_link"
 LIDAR_ENTITIES = ("lidar/scan", "lidar/zero")
 MAP_ENTITIES = ("world/map/occupied", "world/map/free", "world/particles")
 MAP_TF_PERIOD = 0.2  # s, slam_toolbox publishes map -> odom at 50 Hz
+JOINT_TRANSFORM_PERIOD = 1.0 / 30  # s, /joint_states arrives at 100 Hz, 30 Hz is smooth enough
 CAMERAS = ("head", "left", "right")
 FFMPEG_TYPE = "ffmpeg_image_transport_msgs/msg/FFMPEGPacket"
 AV_PKT_FLAG_KEY = 1
+
+# rcl_interfaces/msg/Log.level values (rclpy.logging.LoggingSeverity) -> rr.TextLogLevel
+ROSOUT_LEVELS = {
+    10: rr.TextLogLevel.DEBUG, 20: rr.TextLogLevel.INFO,
+    30: rr.TextLogLevel.WARN, 40: rr.TextLogLevel.ERROR, 50: rr.TextLogLevel.CRITICAL,
+}
+# matches mcp_server/call_log.py's own LOG_PATH (repo root)/logs/mcp_calls.jsonl
+MCP_LOG_PATH = pathlib.Path(__file__).resolve().parent.parent / "logs" / "mcp_calls.jsonl"
+MCP_LOG_POLL_PERIOD = 0.5  # s
 
 # 3D entities that hold world (odom frame) coordinates
 WORLD_ENTITIES = ("world/odom_path", "world/goal", "world/plan", "world/local_plan")
@@ -102,58 +121,78 @@ def yaw_from_quat(q):
     return math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
 
 
+def robot_view(**eye):
+    return rrb.Spatial3DView(
+        name="Robot", origin="/",
+        contents=[
+            "/xlerobot/**", "/transforms/**", "/world/**", "/lidar/**", "/cameras/**",
+            "- /xlerobot/collision_geometries/**"],
+        spatial_information=rrb.SpatialInformation(target_frame=ODOM_FRAME),
+        eye_controls=rrb.EyeControls3D(**eye))
+
+
+def camera_views(cameras):
+    return [rrb.Spatial2DView(name=f"{name} camera", origin=f"/cameras/{name}") for name in cameras]
+
+
 def blueprint(cameras):
-    camera_row = [
-        rrb.Horizontal(*[
-            rrb.Spatial2DView(name=f"{name} camera", origin=f"/cameras/{name}")
-            for name in cameras])
-    ] if cameras else []
-    return rrb.Blueprint(
-        rrb.Horizontal(
-            rrb.Vertical(
-                rrb.Spatial3DView(
-                    name="Robot", origin="/",
-                    contents=[
-                        "/xlerobot/**", "/transforms/**", "/world/**", "/lidar/**", "/cameras/**",
-                        "- /xlerobot/collision_geometries/**"],
-                    spatial_information=rrb.SpatialInformation(target_frame=ODOM_FRAME),
-                    # from the front left and above, the whole robot with both arms and the
-                    # head in view, +z up
-                    eye_controls=rrb.EyeControls3D(
-                        position=(1.25, 0.95, 1.3), look_target=(-0.1, 0.0, 0.75), eye_up=(0.0, 0.0, 1.0))),
-                rrb.Horizontal(
-                    # from above with the robot's front (+x) up, the scan is in the robot's frame
-                    rrb.Spatial3DView(
-                        name="Lidar (front up)", origin="/",
-                        contents=[
-                            "/xlerobot/**", "/transforms/**", "/lidar/**", "/world/front",
-                            "- /xlerobot/collision_geometries/**"],
-                        spatial_information=rrb.SpatialInformation(target_frame="base_link"),
-                        eye_controls=rrb.EyeControls3D(
-                            position=(0.0, 0.0, 2.6), look_target=(0.0, 0.0, 0.0), eye_up=(1.0, 0.0, 0.0))),
-                    rrb.Spatial3DView(
-                        name="Map (start heading up)", origin="/",
-                        contents=[
-                            "/xlerobot/**", "/transforms/**", "/lidar/**", "/world/**",
-                            "- /xlerobot/collision_geometries/**"],
-                        spatial_information=rrb.SpatialInformation(target_frame=MAP_FRAME),
-                        eye_controls=rrb.EyeControls3D(
-                            position=(0.0, 0.0, 8.0), look_target=(0.0, 0.0, 0.0), eye_up=(1.0, 0.0, 0.0))),
-                    rrb.Spatial2DView(
-                        name="Odometry (top view)", origin="/odom",
-                        contents=["/odom/path", "/odom/pose", "/odom/goal", "/odom/plan"]),
-                    column_shares=[2, 3, 2],
-                ),
-                row_shares=[3, 3],
-            ),
-            rrb.Vertical(
-                *camera_row,
-                rrb.TimeSeriesView(name="Velocities", origin="/velocity"),
-                rrb.TimeSeriesView(name="Yaw", origin="/odom/yaw"),
-                row_shares=[2, 3, 1.2] if cameras else [3, 1],
-            ),
-            column_shares=[3, 2],
+    # Tabs, not everything at once: the robot+cameras view is what you want live and
+    # by default, the rest (odometry/map/lidar diagnostics) is there when needed but
+    # doesn't compete for screen space the rest of the time.
+    main_tab = rrb.Horizontal(
+        # from the front left and above, the whole robot with both arms and the
+        # head in view, +z up
+        robot_view(position=(1.25, 0.95, 1.3), look_target=(-0.1, 0.0, 0.75), eye_up=(0.0, 0.0, 1.0)),
+        rrb.Vertical(
+            *([rrb.Horizontal(*camera_views(cameras))] if cameras else []),
+            rrb.TimeSeriesView(name="Velocities", origin="/velocity"),
+            row_shares=[3, 1] if cameras else [1],
         ),
+        column_shares=[3, 2],
+        name="Main",
+    )
+
+    tabs = [main_tab]
+
+    if cameras:
+        tabs.append(rrb.Horizontal(*camera_views(cameras), name="Cameras"))
+
+    tabs.append(rrb.Horizontal(
+        rrb.Vertical(
+            # from above with the robot's front (+x) up, the scan is in the robot's frame
+            rrb.Spatial3DView(
+                name="Lidar (front up)", origin="/",
+                contents=[
+                    "/xlerobot/**", "/transforms/**", "/lidar/**", "/world/front",
+                    "- /xlerobot/collision_geometries/**"],
+                spatial_information=rrb.SpatialInformation(target_frame="base_link"),
+                eye_controls=rrb.EyeControls3D(
+                    position=(0.0, 0.0, 2.6), look_target=(0.0, 0.0, 0.0), eye_up=(1.0, 0.0, 0.0))),
+            rrb.Spatial3DView(
+                name="Map (start heading up)", origin="/",
+                contents=[
+                    "/xlerobot/**", "/transforms/**", "/lidar/**", "/world/**",
+                    "- /xlerobot/collision_geometries/**"],
+                spatial_information=rrb.SpatialInformation(target_frame=MAP_FRAME),
+                eye_controls=rrb.EyeControls3D(
+                    position=(0.0, 0.0, 8.0), look_target=(0.0, 0.0, 0.0), eye_up=(1.0, 0.0, 0.0))),
+            row_shares=[1, 1],
+        ),
+        rrb.Vertical(
+            rrb.Spatial2DView(
+                name="Odometry (top view)", origin="/odom",
+                contents=["/odom/path", "/odom/pose", "/odom/goal", "/odom/plan"]),
+            rrb.TimeSeriesView(name="Yaw", origin="/odom/yaw"),
+            row_shares=[2, 1],
+        ),
+        column_shares=[1, 1],
+        name="Odometry & Map",
+    ))
+
+    tabs.append(rrb.TextLogView(name="Logs", origin="/logs"))
+
+    return rrb.Blueprint(
+        rrb.Tabs(*tabs, active_tab=0),
         # follow the live edge, otherwise a fresh viewer sits at the start of the
         # recording, before the first odom transform, and draws no robot
         rrb.TimePanel(timeline="ros_time", play_state=PlayState.Following),
@@ -183,6 +222,10 @@ class RerunBridge(Node):
         super().__init__("rerun_bridge")
         self.path = []
         self.joints = {}
+        self.last_joint_transform_time = 0.0
+        self.create_subscription(Log, "/rosout", self.on_rosout, QoSProfile(depth=100))
+        self.mcp_log_pos = 0
+        self.create_timer(MCP_LOG_POLL_PERIOD, self.poll_mcp_log)
         self.create_subscription(Odometry, "/diff_drive_controller/odom", self.on_odom, 20)
         self.create_subscription(
             TwistStamped, "/diff_drive_controller/cmd_vel", self.on_cmd_vel_final, 20)
@@ -214,13 +257,20 @@ class RerunBridge(Node):
             self.create_timer(2.0, self.find_cameras)
 
         # Camera intrinsics (rr.Pinhole), so the 3D view draws a frustum at each camera's real
-        # mounted pose and projects the live video stream through it - logged once per camera,
-        # as soon as both the intrinsics (camera_info) and the extrinsics (tf, base_link -> the
-        # camera's own optical frame) are available. Needs real calibration data to mean anything;
-        # before that, camera_info publishes the all-zeros placeholder usb_cam defaults to, which
-        # would draw a degenerate (zero-size) frustum - skipped below until fx/fy are non-zero.
-        self.tf_buffer = tf2_ros.Buffer()
-        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        # mounted pose and projects the live video stream through it - logged once per camera, as
+        # soon as its intrinsics are real (camera_info publishes an all-zero placeholder before
+        # calibration, which would draw a degenerate frustum - skipped below until fx/fy are
+        # non-zero). The camera's optical frame (msg.header.frame_id, e.g.
+        # head_camera_optical_frame) already has a static Transform3D from the URDF
+        # (UrdfTree.log_urdf_to_recording logs one per joint, fixed or not, at /tf_static) - giving
+        # Pinhole that same name as its own child_frame would make /cameras/<name> a SECOND static
+        # definition of that already-owned frame ("Two entities define the same child frame").
+        # CoordinateFrame doesn't help either: it relabels an entity's own coordinate values, it
+        # doesn't give the entity a resolvable pose. What actually works: set Pinhole's
+        # parent_frame to the real URDF frame and leave child_frame at its default (the entity's
+        # own implicit "tf#/cameras/<name>") - a brand new, uniquely-named frame, parented to the
+        # real one. No identity ever gets redefined, and any number of children can share one
+        # parent, so nothing conflicts.
         self.pinhole_logged = set()
         for name in CAMERAS:
             self.create_subscription(
@@ -233,25 +283,46 @@ class RerunBridge(Node):
         fx, fy = msg.k[0], msg.k[4]
         if fx <= 0.0 or fy <= 0.0:
             return  # uncalibrated placeholder (all-zeros) - nothing real to draw yet
-        try:
-            tf = self.tf_buffer.lookup_transform(BASE_FRAME, msg.header.frame_id, rclpy.time.Time())
-        except tf2_ros.TransformException:
-            return  # static transform not received yet - camera_info keeps arriving, try again
-        v, q = tf.transform.translation, tf.transform.rotation
-        rr.log(
-            f"cameras/{name}",
-            rr.Transform3D(
-                translation=[v.x, v.y, v.z], rotation=rr.Quaternion(xyzw=[q.x, q.y, q.z, q.w]),
-                parent_frame=BASE_FRAME, child_frame=f"cameras/{name}"),
-            static=True)
         rr.log(
             f"cameras/{name}",
             rr.Pinhole(
                 resolution=[msg.width, msg.height], focal_length=[fx, fy],
-                principal_point=[msg.k[2], msg.k[5]], camera_xyz=rr.ViewCoordinates.RDF),
+                principal_point=[msg.k[2], msg.k[5]], camera_xyz=rr.ViewCoordinates.RDF,
+                parent_frame=msg.header.frame_id),
             static=True)
         self.pinhole_logged.add(name)
         self.get_logger().info(f"logged camera frustum for {name} (fx={fx:.1f}, fy={fy:.1f})")
+
+    def on_rosout(self, msg: Log):
+        stamp = msg.stamp.sec + msg.stamp.nanosec / 1e9
+        rr.set_time("ros_time", timestamp=stamp if stamp > 0.0 else self.get_clock().now().nanoseconds / 1e9)
+        rr.log(
+            f"logs/rosout/{msg.name}",
+            rr.TextLog(msg.msg, level=ROSOUT_LEVELS.get(msg.level, rr.TextLogLevel.INFO)))
+
+    def poll_mcp_log(self):
+        """Tail logs/mcp_calls.jsonl (mcp_server/call_log.py's audit trail) for new lines. A
+        plain file read, not a subscription - the MCP server has no ROS dependency, and this
+        stays true if it ever runs on a different machine than the bridge (it won't find the
+        file then, and the Logs tab just has nothing from that source - no hard dependency)."""
+        if not MCP_LOG_PATH.is_file():
+            return
+        with open(MCP_LOG_PATH) as f:
+            f.seek(self.mcp_log_pos)
+            new_lines = f.readlines()
+            self.mcp_log_pos = f.tell()
+        for line in new_lines:
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            stamp = datetime.datetime.fromisoformat(entry["time"]).timestamp()
+            rr.set_time("ros_time", timestamp=stamp)
+            level = rr.TextLogLevel.INFO if entry.get("ok") else rr.TextLogLevel.ERROR
+            text = f"{entry['tool']}({entry.get('args')}) [{entry.get('reason')}] -> "
+            text += "ok" if entry.get("ok") else f"ERROR: {entry.get('error')}"
+            text += f" ({entry.get('duration_s')}s)"
+            rr.log("logs/mcp", rr.TextLog(text, level=level))
 
     def set_time(self, header):
         stamp = stamp_seconds(header)
@@ -419,6 +490,17 @@ class RerunBridge(Node):
         for name, position, velocity in zip(msg.name, msg.position, msg.velocity):
             if name in ("left_wheel_joint", "right_wheel_joint"):
                 rr.log(f"wheels/{name}/velocity", rr.Scalars(velocity))
+        # the 16 movable joints each need their own Transform3D log call (one rr.log() per
+        # joint, there's no batched multi-entity send), and /joint_states arrives at 100 Hz -
+        # unthrottled that's ~1600 log calls/s from this callback alone, which was the actual
+        # cause of a measured 90s+ end-to-end latency (SDK-side gRPC sink and the viewer's own
+        # ingest both backed up under the volume, confirmed via the viewer's own latency
+        # breakdown - not network, both machines' clocks and ROS2 transport measured at ~70ms).
+        now = self.get_clock().now().nanoseconds / 1e9
+        if now - self.last_joint_transform_time < JOINT_TRANSFORM_PERIOD:
+            return
+        self.last_joint_transform_time = now
+        for name, position in zip(msg.name, msg.position):
             if name in self.joints:
                 rr.log(f"transforms/{name}", self.joints[name].compute_transform(position))
 
