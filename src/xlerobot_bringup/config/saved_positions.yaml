@@ -12,3 +12,8 @@ positions:
       right_arm_elbow_flex_joint: -3.0
       right_arm_wrist_flex_joint: 0.0
       right_arm_wrist_roll_joint: 1.5708
+  head_forward:
+    group: head
+    joints:
+      head_pan_joint: 0.0
+      head_tilt_joint: 0.0
