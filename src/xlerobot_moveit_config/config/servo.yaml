@@ -1,0 +1,45 @@
+# MoveIt Servo, shared between both arms - move_group_name and command_out_topic are set per
+# arm by launch/servo.launch.py (arm:=left|right), everything else here is arm-agnostic.
+#
+# Values tuned for the SO-101 arm, not the panda example this started from: servo_speed_limit_steps
+# (robot_dimensions.yaml) caps the real hardware at ~0.92 rad/s regardless of what's commanded
+# here, so joint scale stays comfortably under that. Cartesian linear scale is deliberately slow
+# (0.06 m/s) - the whole arm only reaches ~0.3 m, so even this crosses it in ~5s, and these arms
+# work right next to a desk.
+
+publish_period: 0.02  # 50 Hz
+max_expected_latency: 0.1
+
+command_in_type: "unitless"  # joystick-style [-1:1] input, scaled by the factors below
+scale:
+  linear: 0.06      # m/s, Cartesian
+  rotational: 0.5   # rad/s, Cartesian
+  joint: 0.35       # rad/s, joint jog - under the 0.8 rad/s per-joint velocity limit
+
+command_out_type: trajectory_msgs/JointTrajectory
+publish_joint_positions: true
+publish_joint_velocities: false
+publish_joint_accelerations: false
+
+use_smoothing: true
+smoothing_filter_plugin_name: "online_signal_smoothing::AccelerationLimitedPlugin"
+
+# move_group (this project's xlerobot_moveit_config launch) already owns the primary planning
+# scene monitor - a second "primary" here would fight it over who publishes the scene.
+is_primary_planning_scene_monitor: false
+
+lower_singularity_threshold: 10.0
+hard_stop_singularity_threshold: 30.0
+leaving_singularity_threshold_multiplier: 2.0
+joint_limit_margins: [0.12]  # matches sts_arm_joint's own limit_margin, robot_dimensions.yaml
+
+cartesian_command_in_topic: ~/delta_twist_cmds
+joint_command_in_topic: ~/delta_joint_cmds
+joint_topic: /joint_states
+status_topic: ~/status
+# command_out_topic set per-arm by servo.launch.py
+
+check_collisions: true
+collision_check_rate: 10.0
+self_collision_proximity_threshold: 0.01
+scene_collision_proximity_threshold: 0.02
