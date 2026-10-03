@@ -17,7 +17,8 @@ import yaml
 
 HOME_MARKER_DICT = aruco.DICT_4X4_250
 HOME_MARKER_ID = 100  # outside the ChArUco board's own 0-43 ID range (tools/calibrate_camera_charuco.py)
-HOME_MARKER_SIZE_M = 0.15  # the printed black square's side length - re-measure after printing
+HOME_MARKER_SIZE_M = 0.163  # measured on the actual print (target was 0.15 - printer rescaled it;
+# matching the real printed size here is what matters, not the original target)
 
 CONFIG_PATH = (pathlib.Path(__file__).resolve().parent.parent
                / "src" / "xlerobot_navigation" / "config" / "home_marker.yaml")
