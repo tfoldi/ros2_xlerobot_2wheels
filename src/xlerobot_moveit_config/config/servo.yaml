@@ -1,19 +1,22 @@
 # MoveIt Servo, shared between both arms - move_group_name and command_out_topic are set per
 # arm by launch/servo.launch.py (arm:=left|right), everything else here is arm-agnostic.
 #
+# JOINT_JOG only - arm_servo_teleop never drives Servo's Cartesian (TWIST) input, see
+# docs/decisions/0004-drop-cartesian-servo-jog.md. The cartesian_command_in_topic, scale.linear,
+# scale.rotational, and singularity threshold fields below stay only because servo_node expects
+# them at startup regardless of which command type is actually used; they're dead weight here.
+#
 # Values tuned for the SO-101 arm, not the panda example this started from: servo_speed_limit_steps
 # (robot_dimensions.yaml) caps the real hardware at ~0.92 rad/s regardless of what's commanded
-# here, so joint scale stays comfortably under that. Cartesian linear scale is deliberately slow
-# (0.06 m/s) - the whole arm only reaches ~0.3 m, so even this crosses it in ~5s, and these arms
-# work right next to a desk.
+# here, so joint scale stays comfortably under that.
 
 publish_period: 0.02  # 50 Hz
 max_expected_latency: 0.1
 
 command_in_type: "unitless"  # joystick-style [-1:1] input, scaled by the factors below
 scale:
-  linear: 0.06      # m/s, Cartesian
-  rotational: 0.5   # rad/s, Cartesian
+  linear: 0.06      # m/s, Cartesian - unused, see note above
+  rotational: 0.5   # rad/s, Cartesian - unused, see note above
   joint: 0.35       # rad/s, joint jog - under the 0.8 rad/s per-joint velocity limit
 
 command_out_type: trajectory_msgs/JointTrajectory
@@ -28,6 +31,8 @@ smoothing_filter_plugin_name: "online_signal_smoothing::AccelerationLimitedPlugi
 # scene monitor - a second "primary" here would fight it over who publishes the scene.
 is_primary_planning_scene_monitor: false
 
+# Panda/UR example defaults - unused now that TWIST is dropped (that's what this gate checks),
+# see docs/decisions/0004-drop-cartesian-servo-jog.md for why raising these didn't help.
 lower_singularity_threshold: 10.0
 hard_stop_singularity_threshold: 30.0
 leaving_singularity_threshold_multiplier: 2.0

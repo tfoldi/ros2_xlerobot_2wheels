@@ -1,7 +1,10 @@
-# mcp_presence_guard config. presence_button confirmed against the actual gamepad's /joy output
-# (RB -> buttons[7] on this controller/driver, not the generic-Xbox-layout guess of 5) - if you
-# swap controllers, re-check with `ros2 topic echo /joy` before trusting this.
+# mcp_presence_guard config. Confirmed button layout (2026-10-03, see arm_servo_teleop.yaml):
+# A=0 B=1 X=3 Y=4 LB=6 RB=7. presence_button moved here from RB(7) to Y(4) 2026-10-03, swapped
+# with joystick.yaml's enable_button (drive moved to RB to free up Y) - still deliberately not
+# the same button as drive-enable, the two concerns still don't overlap, just swapped which
+# physical button each one is. If you swap controllers, re-check with `ros2 topic echo /joy`
+# before trusting this.
 mcp_presence_guard:
   ros__parameters:
-    presence_button: 7   # RB - deliberately not joystick.yaml's enable_button (4, physically Y)
+    presence_button: 4   # Y
     timeout_sec: 5.0

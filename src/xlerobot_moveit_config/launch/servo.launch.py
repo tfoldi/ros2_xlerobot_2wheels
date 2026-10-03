@@ -1,5 +1,8 @@
-"""MoveIt Servo for one arm - real-time Cartesian/joint jogging, as opposed to the one-shot
+"""MoveIt Servo for one arm - real-time joint-space jogging, as opposed to the one-shot
 plan+execute moves tools/move_to_pose.py and tools/goto_position.py send through move_group.
+Cartesian (TWIST) jogging is deliberately not used by anything in this project - see
+docs/decisions/0004-drop-cartesian-servo-jog.md - but Servo itself still accepts it if driven
+directly.
 
 Run next to bringup and move_group (both already provide what this needs - robot_description,
 controllers, joint_states):
@@ -10,7 +13,7 @@ controllers, joint_states):
 
 One instance per arm - launch it twice (arm:=left, arm:=right) for both at once, each gets its
 own node name (servo_left / servo_right) so their relative topics don't collide:
-  /servo_right/delta_twist_cmds   (geometry_msgs/TwistStamped, Cartesian jog)
+  /servo_right/delta_twist_cmds   (geometry_msgs/TwistStamped, Cartesian jog, unused)
   /servo_right/delta_joint_cmds   (control_msgs/JointJog, joint-space jog)
   /servo_right/status
 
@@ -25,13 +28,13 @@ something calls its ~/switch_command_type service (moveit_msgs/srv/ServoCommandT
 documented in the YAML config, found by testing: sending real JointJog/TwistStamped commands did
 nothing and the node logged that warning on every message until the service was called once.
 auto_activate:=true (the default) calls it a few seconds after the node starts, defaulting to
-TWIST - convenient for standalone testing of this launch file by hand.
+JOINT_JOG - convenient for standalone testing of this launch file by hand.
 
 Pass auto_activate:=false when something else (xlerobot_teleop's arm_servo_teleop node) owns
 calling that service instead - found by testing that this launch file's own 5s timer firing
-*after* arm_servo_teleop's own earlier sync call silently clobbered it back to TWIST, since
-whichever call lands last wins and there was no coordination between the two. Only one thing
-should ever call switch_command_type for a given arm.
+*after* arm_servo_teleop's own earlier sync call silently clobbered it back to whatever this
+timer sends, since whichever call lands last wins and there was no coordination between the
+two. Only one thing should ever call switch_command_type for a given arm.
 """
 
 import os
@@ -101,7 +104,7 @@ def launch_setup(context):
             actions=[
                 ExecuteProcess(
                     cmd=["ros2", "service", "call", f"/servo_{arm}/switch_command_type",
-                         "moveit_msgs/srv/ServoCommandType", "{command_type: 1}"],
+                         "moveit_msgs/srv/ServoCommandType", "{command_type: 0}"],
                     output="screen",
                 ),
             ],

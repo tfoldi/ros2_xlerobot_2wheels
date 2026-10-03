@@ -1,34 +1,33 @@
 #!/usr/bin/env python3
-"""Joystick -> MoveIt Servo teleop for one arm at a time, picking up where joystick.yaml's base
-drive (left stick + button 4) leaves off. Needs both src/xlerobot_moveit_config/launch/
-servo.launch.py arm:=left and arm:=right already running - this node only ever selects which
-one it's currently sending commands to, it doesn't start them.
+"""Joystick -> MoveIt Servo teleop for both arms at once, each driven by its own stick - left
+stick jogs the left arm, right stick jogs the right arm, same side-to-side mapping as the base
+drive's own left-stick-drives-the-whole-robot convention. Needs both
+src/xlerobot_moveit_config/launch/servo.launch.py arm:=left and arm:=right already running -
+this node only ever sends them commands, it doesn't start them.
 
-Deadman: enable_button must be held for anything to move - released, this publishes one zero
-command and pauses the active arm's Servo instance (~/pause_servo), same shape as
-teleop_twist_joy's own deadman for the base. Unlike the base drive, nothing else in this
-project gates arm-jog motion (no presence/MCP check) - this button IS the only safety gate,
-treat it with the same care as the base's deadman.
+Deadman: enable_button must be held for anything to move - released, this publishes a zero
+command and pauses both arms' Servo instances (~/pause_servo), same shape as teleop_twist_joy's
+own deadman for the base. Unlike the base drive, nothing else in this project gates arm-jog
+motion (no presence/MCP check) - this button IS the only safety gate for it, treat it with the
+same care as the base's deadman. Both arms share one deadman - there's no way to jog just one
+arm while leaving the other paused, by design, to keep this simple.
 
-Two jog modes, toggled with mode_button (tap while held):
-  JOINT_JOG (default, starts here) - moves specific joints directly, immune to the Cartesian
-    singularities this arm hits in several poses (see project memory, 2026-10-02/03) - the
-    reliable fallback.
-  TWIST - Cartesian X/Y (right stick) + Z (triggers), more intuitive when it's not near a
-    singularity, refuses to move (Servo's own safety stop) when it is.
+JOINT_JOG only: each stick's X/Y drives two named joints of its own arm directly. Servo's
+Cartesian (TWIST) mode was tried and dropped - see docs/decisions/0004-drop-cartesian-servo-jog.md
+for why.
 
-arm_select_button (tap while held) toggles which arm is being driven, starts on right.
-gripper_toggle_button (tap while held) opens/closes that arm's gripper directly (not via Servo -
-grippers aren't part of either arm's planning group).
+gripper_toggle_button (tap while held) opens/closes BOTH grippers together (not via Servo -
+grippers aren't part of either arm's planning group) - there's no independent left/right gripper
+control in this node, use tools/single_joint_test.py or tools/goto_position.py for that.
 
-Every button/axis index in config/arm_servo_teleop.yaml is an unverified guess - check with
-`ros2 topic echo /joy` before trusting any of it, same as joystick.yaml and mcp_presence.yaml
-both needed.
+Confirmed on the real controller (2026-10-03): A=0 B=1 X=3 Y=4 LB=6 RB=7, left stick [0,1],
+right stick [2,3], D-pad [6,7], LT=8 RT=9 (digital buttons, not axes). Y is joystick.yaml's
+enable_button (base drive) and RB is mcp_presence_guard's presence_button as of 2026-10-03 (the
+two were swapped so drive could move to RB) - neither read here, kept clear on purpose.
 """
 import rclpy
 from control_msgs.action import FollowJointTrajectory
 from control_msgs.msg import JointJog
-from geometry_msgs.msg import TwistStamped
 from moveit_msgs.srv import ServoCommandType
 from rclpy.action import ActionClient
 from rclpy.node import Node
@@ -36,7 +35,8 @@ from sensor_msgs.msg import Joy
 from std_srvs.srv import SetBool
 from trajectory_msgs.msg import JointTrajectoryPoint
 
-JOINT_JOG, TWIST = ServoCommandType.Request.JOINT_JOG, ServoCommandType.Request.TWIST
+ARMS = ("left", "right")
+JOINT_JOG = ServoCommandType.Request.JOINT_JOG
 GRIPPER_OPEN, GRIPPER_CLOSED = -0.7, 0.35  # rad, matches the SRDF's open/closed group states
 
 
@@ -44,84 +44,59 @@ class ArmServoTeleop(Node):
     def __init__(self):
         super().__init__("arm_servo_teleop")
         self.declare_parameters("", [
-            ("enable_button", 1),
-            ("arm_select_button", 0),
-            ("mode_button", 3),
-            ("axis_x", 2),
-            ("axis_y", 3),
-            ("trigger_up_button", 9),
-            ("trigger_down_button", 8),
-            ("gripper_toggle_button", 6),
+            ("enable_button", 6),       # LB
+            ("gripper_toggle_button", 0),  # A
+            ("left_axis_x", 0),
+            ("left_axis_y", 1),
+            ("right_axis_x", 2),
+            ("right_axis_y", 3),
             ("joint_jog_axis_x_joint", "wrist_flex_joint"),
             ("joint_jog_axis_y_joint", "wrist_roll_joint"),
-            ("joint_jog_dpad_x_axis", 6),
-            ("joint_jog_dpad_x_joint", "shoulder_pan_joint"),
-            ("joint_jog_dpad_y_axis", 7),
-            ("joint_jog_dpad_y_joint", "elbow_flex_joint"),
             ("deadzone", 0.1),
             ("publish_rate_hz", 50.0),
         ])
         p = self.get_parameter
         self.enable_button = p("enable_button").value
-        self.arm_select_button = p("arm_select_button").value
-        self.mode_button = p("mode_button").value
-        self.axis_x = p("axis_x").value
-        self.axis_y = p("axis_y").value
-        self.trigger_up_button = p("trigger_up_button").value
-        self.trigger_down_button = p("trigger_down_button").value
         self.gripper_toggle_button = p("gripper_toggle_button").value
+        self.axes = {
+            "left": (p("left_axis_x").value, p("left_axis_y").value),
+            "right": (p("right_axis_x").value, p("right_axis_y").value),
+        }
         self.jj_axis_x_joint = p("joint_jog_axis_x_joint").value
         self.jj_axis_y_joint = p("joint_jog_axis_y_joint").value
-        self.jj_dpad_x_axis = p("joint_jog_dpad_x_axis").value
-        self.jj_dpad_x_joint = p("joint_jog_dpad_x_joint").value
-        self.jj_dpad_y_axis = p("joint_jog_dpad_y_axis").value
-        self.jj_dpad_y_joint = p("joint_jog_dpad_y_joint").value
         self.deadzone = p("deadzone").value
 
-        self.arm = "right"
-        self.mode = JOINT_JOG
-        self.synced = False  # whether the active arm's actual Servo mode matches self.mode yet -
-        # servo.launch.py's own startup timer defaults every Servo instance to TWIST regardless
-        # of what this node claims as its default, so without this sync step the two disagree
-        # until the user manually toggles mode_button once.
+        self.synced = {arm: False for arm in ARMS}  # per-arm: has this node told the real Servo
+        # instance to use JOINT_JOG yet - servo.launch.py's own startup timer defaults every
+        # Servo instance to TWIST regardless of what this node wants, so without this each arm
+        # stays in TWIST until told otherwise.
         self.enabled_prev = False
-        self.arm_select_prev = False
-        self.mode_button_prev = False
         self.gripper_prev = False
         self.gripper_state = {"left": GRIPPER_CLOSED, "right": GRIPPER_CLOSED}
         self.joy = None
 
-        self.twist_pubs = {
-            arm: self.create_publisher(TwistStamped, f"/servo_{arm}/delta_twist_cmds", 10)
-            for arm in ("left", "right")
-        }
         self.jog_pubs = {
-            arm: self.create_publisher(JointJog, f"/servo_{arm}/delta_joint_cmds", 10)
-            for arm in ("left", "right")
+            arm: self.create_publisher(JointJog, f"/servo_{arm}/delta_joint_cmds", 10) for arm in ARMS
         }
         self.pause_clients = {
-            arm: self.create_client(SetBool, f"/servo_{arm}/pause_servo") for arm in ("left", "right")
+            arm: self.create_client(SetBool, f"/servo_{arm}/pause_servo") for arm in ARMS
         }
         self.command_type_clients = {
-            arm: self.create_client(ServoCommandType, f"/servo_{arm}/switch_command_type")
-            for arm in ("left", "right")
+            arm: self.create_client(ServoCommandType, f"/servo_{arm}/switch_command_type") for arm in ARMS
         }
         self.gripper_clients = {
             arm: ActionClient(self, FollowJointTrajectory, f"/{arm}_gripper_controller/follow_joint_trajectory")
-            for arm in ("left", "right")
+            for arm in ARMS
         }
 
         self.create_subscription(Joy, "/joy", self.on_joy, 10)
         self.create_timer(1.0 / p("publish_rate_hz").value, self.tick)
 
-        for arm in ("left", "right"):
+        for arm in ARMS:
             self.set_pause(arm, True)
         self.get_logger().info(
-            f"arm_servo_teleop up - hold button {self.enable_button} to jog, "
-            f"starts on {self.arm} arm, {self.mode_name()} mode")
-
-    def mode_name(self):
-        return "JOINT_JOG" if self.mode == JOINT_JOG else "TWIST"
+            f"arm_servo_teleop up - hold button {self.enable_button} to jog both arms "
+            f"(left stick -> left arm, right stick -> right arm), JOINT_JOG mode")
 
     def set_pause(self, arm, paused):
         if self.pause_clients[arm].service_is_ready():
@@ -161,65 +136,42 @@ class ArmServoTeleop(Node):
         return bool(self.joy.buttons[index])
 
     def tick(self):
-        if not self.synced and self.command_type_clients[self.arm].service_is_ready():
-            self.set_command_type(self.arm, self.mode)
-            self.synced = True
+        for arm in ARMS:
+            if not self.synced[arm] and self.command_type_clients[arm].service_is_ready():
+                self.set_command_type(arm, JOINT_JOG)
+                self.synced[arm] = True
 
         if self.joy is None:
             return
         enabled = self.button(self.enable_button)
 
-        # Edge-triggered toggles, only while the deadman is held - a stray press while not
-        # jogging shouldn't silently change which arm/mode activates next time it is.
-        if enabled:
-            if self.button(self.arm_select_button) and not self.arm_select_prev:
-                self.stop_and_pause(self.arm)
-                self.arm = "left" if self.arm == "right" else "right"
-                self.set_command_type(self.arm, self.mode)
-                self.get_logger().info(f"active arm: {self.arm}")
-            if self.button(self.mode_button) and not self.mode_button_prev:
-                self.mode = TWIST if self.mode == JOINT_JOG else JOINT_JOG
-                self.set_command_type(self.arm, self.mode)
-                self.get_logger().info(f"mode: {self.mode_name()}")
-            if self.button(self.gripper_toggle_button) and not self.gripper_prev:
-                current = self.gripper_state[self.arm]
-                target = GRIPPER_OPEN if current == GRIPPER_CLOSED else GRIPPER_CLOSED
-                self.gripper_state[self.arm] = target
-                self.send_gripper(self.arm, target)
-        self.arm_select_prev = self.button(self.arm_select_button)
-        self.mode_button_prev = self.button(self.mode_button)
+        # Edge-triggered, only while the deadman is held - a stray press while not jogging
+        # shouldn't silently toggle the gripper next time it is.
+        if enabled and self.button(self.gripper_toggle_button) and not self.gripper_prev:
+            for arm in ARMS:
+                target = GRIPPER_OPEN if self.gripper_state[arm] == GRIPPER_CLOSED else GRIPPER_CLOSED
+                self.gripper_state[arm] = target
+                self.send_gripper(arm, target)
         self.gripper_prev = self.button(self.gripper_toggle_button)
 
         if enabled and not self.enabled_prev:
-            self.set_pause(self.arm, False)
+            for arm in ARMS:
+                self.set_pause(arm, False)
         elif not enabled and self.enabled_prev:
-            self.stop_and_pause(self.arm)
+            for arm in ARMS:
+                self.stop_and_pause(arm)
         self.enabled_prev = enabled
 
         if not enabled:
             return
 
-        if self.mode == TWIST:
-            msg = TwistStamped()
-            msg.header.stamp = self.get_clock().now().to_msg()
-            msg.header.frame_id = "base_footprint"
-            msg.twist.linear.x = self.axis(self.axis_x)
-            msg.twist.linear.y = self.axis(self.axis_y)
-            # LT/RT report as plain digital buttons on this controller/driver, not analog axes -
-            # full-scale while held, not proportional.
-            msg.twist.linear.z = float(self.button(self.trigger_up_button)) - float(self.button(self.trigger_down_button))
-            self.twist_pubs[self.arm].publish(msg)
-        else:
+        for arm in ARMS:
+            axis_x, axis_y = self.axes[arm]
             names, vels = [], []
-            for axis_idx, joint in (
-                (self.axis_x, self.jj_axis_x_joint),
-                (self.axis_y, self.jj_axis_y_joint),
-                (self.jj_dpad_x_axis, self.jj_dpad_x_joint),
-                (self.jj_dpad_y_axis, self.jj_dpad_y_joint),
-            ):
+            for axis_idx, joint in ((axis_x, self.jj_axis_x_joint), (axis_y, self.jj_axis_y_joint)):
                 v = self.axis(axis_idx)
                 if v != 0.0:
-                    names.append(f"{self.arm}_arm_{joint}")
+                    names.append(f"{arm}_arm_{joint}")
                     vels.append(v)
             if names:
                 msg = JointJog()
@@ -227,13 +179,9 @@ class ArmServoTeleop(Node):
                 msg.joint_names = names
                 msg.velocities = vels
                 msg.duration = 0.1
-                self.jog_pubs[self.arm].publish(msg)
+                self.jog_pubs[arm].publish(msg)
 
     def stop_and_pause(self, arm):
-        zero_twist = TwistStamped()
-        zero_twist.header.stamp = self.get_clock().now().to_msg()
-        zero_twist.header.frame_id = "base_footprint"
-        self.twist_pubs[arm].publish(zero_twist)
         zero_jog = JointJog()
         zero_jog.header.stamp = self.get_clock().now().to_msg()
         self.jog_pubs[arm].publish(zero_jog)
@@ -248,7 +196,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        for arm in ("left", "right"):
+        for arm in ARMS:
             node.stop_and_pause(arm)
         node.destroy_node()
         rclpy.shutdown()

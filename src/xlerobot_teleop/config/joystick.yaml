@@ -1,13 +1,14 @@
-# teleop_twist_joy config. Axis/button numbers are for a generic Xbox layout,
-# check against upstream's software/examples/calibrate_gamepad.py mapping
-# before trusting these, controller layouts vary by driver.
+# teleop_twist_joy config. Confirmed button/axis layout for the real controller (2026-10-03,
+# see arm_servo_teleop.yaml) - A=0 B=1 X=3 Y=4 LB=6 RB=7, left stick [0,1], right stick [2,3].
 teleop_twist_joy_node:
   ros__parameters:
     axis_linear.x: 1
     scale_linear.x: 0.25    # matches robot_dimensions.yaml linear_velocity_max
     axis_angular.yaw: 0
     scale_angular.yaw: 1.50 # matches angular_velocity_max
-    enable_button: 4        # left bumper, deadman switch, deliberate choice
+    enable_button: 7        # RB - moved here from Y(4) 2026-10-03, swapped with
+                             # mcp_presence.yaml's presence_button so drive-enable and MCP
+                             # presence still never share a button
     require_enable_button: true
     # twist_mux (installed version) subscribes TwistStamped only, not plain
     # Twist. Without this, teleop_twist_joy publishes unstamped by default
