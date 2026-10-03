@@ -3,5 +3,5 @@
 # swap controllers, re-check with `ros2 topic echo /joy` before trusting this.
 mcp_presence_guard:
   ros__parameters:
-    presence_button: 7   # RB - deliberately not joystick.yaml's enable_button (4, left bumper)
+    presence_button: 7   # RB - deliberately not joystick.yaml's enable_button (4, physically Y)
     timeout_sec: 5.0
