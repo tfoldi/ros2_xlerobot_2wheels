@@ -24,9 +24,14 @@ Beyond "paused", Servo 2.x also refuses every command with "Command type has not
 something calls its ~/switch_command_type service (moveit_msgs/srv/ServoCommandType) - not
 documented in the YAML config, found by testing: sending real JointJog/TwistStamped commands did
 nothing and the node logged that warning on every message until the service was called once.
-This launch file calls it a few seconds after the node starts, defaulting to TWIST (Cartesian
-jogging) - the joystick-mapping node can call the same service to switch to JOINT_JOG when it
-wants joint-space control instead.
+auto_activate:=true (the default) calls it a few seconds after the node starts, defaulting to
+TWIST - convenient for standalone testing of this launch file by hand.
+
+Pass auto_activate:=false when something else (xlerobot_teleop's arm_servo_teleop node) owns
+calling that service instead - found by testing that this launch file's own 5s timer firing
+*after* arm_servo_teleop's own earlier sync call silently clobbered it back to TWIST, since
+whichever call lands last wins and there was no coordination between the two. Only one thing
+should ever call switch_command_type for a given arm.
 """
 
 import os
@@ -87,6 +92,7 @@ def launch_setup(context):
             ],
             output="screen",
         ),
+    ] + ([
         # See the module docstring - Servo silently refuses every command until this is called
         # once. 5s is comfortably past the ~3s this node took to log "Servo initialized
         # successfully" when tested on hardware.
@@ -100,11 +106,12 @@ def launch_setup(context):
                 ),
             ],
         ),
-    ]
+    ] if LaunchConfiguration("auto_activate").perform(context) == "true" else [])
 
 
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("arm", description="left or right"),
+        DeclareLaunchArgument("auto_activate", default_value="true"),
         OpaqueFunction(function=launch_setup),
     ])

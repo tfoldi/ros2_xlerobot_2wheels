@@ -1,0 +1,42 @@
+# arm_servo_teleop config. Axis/button numbers are GUESSES (this controller's own layout is
+# already known to differ from the generic-Xbox assumption - joystick.yaml's enable_button is
+# physically "Y", not "left bumper" as its own comment assumed, and mcp_presence.yaml's RB was
+# off by 2 from the generic guess too). Verify every index here with `ros2 topic echo /joy`
+# before trusting it, same as those two needed.
+#
+# Left stick + button 4 (joystick.yaml's enable_button) already drives the base - this node
+# never reads axes 0/1 or button 4, so holding both at once is safe (drives and jogs don't mix,
+# but they also don't fight each other). Button 7 (RB) is mcp_presence_guard's - not used here
+# either, kept clear on purpose in case MCP-issued motion and joystick arm-jog ever run at once.
+arm_servo_teleop:
+  ros__parameters:
+    enable_button: 5          # deadman - hold to jog, release instantly stops (zero cmd + pause)
+    arm_select_button: 6      # tap while held: toggle active arm (starts on right)
+    mode_button: 2            # tap while held: toggle JOINT_JOG <-> TWIST (starts on JOINT_JOG -
+                               # the one that isn't singularity-prone, see project memory)
+
+    # Right stick - Cartesian jog (TWIST mode) or two joints (JOINT_JOG mode, see below)
+    axis_x: 3
+    axis_y: 4
+    # Z axis for TWIST mode - most layouts put L2/R2 here (trigger axes), separate from the
+    # right stick so all three Cartesian dimensions are available without a mode chord
+    axis_z_up: 5
+    axis_z_down: 2
+
+    # Gripper - tap while held to toggle open/closed (open=-0.7 rad, closed=0.35 rad, matches
+    # the SRDF's own "open"/"closed" named states for {arm}_gripper, see tools/goto_position.py)
+    gripper_toggle_button: 0
+
+    # JOINT_JOG mode: right stick drives these two joints directly (axis_x -> first, axis_y ->
+    # second); D-pad (axes 6/7 on most layouts) drives the other two. No joint-select step, so
+    # not every joint is reachable from the stick alone in v1 - wrist_roll and the gripper still
+    # need their own test via tools/single_joint_test.py if fine per-joint control is needed.
+    joint_jog_axis_x_joint: wrist_flex_joint
+    joint_jog_axis_y_joint: wrist_roll_joint
+    joint_jog_dpad_x_axis: 6
+    joint_jog_dpad_x_joint: shoulder_pan_joint
+    joint_jog_dpad_y_axis: 7
+    joint_jog_dpad_y_joint: elbow_flex_joint
+
+    deadzone: 0.1
+    publish_rate_hz: 50.0
