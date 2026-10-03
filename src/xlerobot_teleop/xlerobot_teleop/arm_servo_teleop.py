@@ -44,14 +44,14 @@ class ArmServoTeleop(Node):
     def __init__(self):
         super().__init__("arm_servo_teleop")
         self.declare_parameters("", [
-            ("enable_button", 5),
-            ("arm_select_button", 6),
-            ("mode_button", 2),
-            ("axis_x", 3),
-            ("axis_y", 4),
-            ("axis_z_up", 5),
-            ("axis_z_down", 2),
-            ("gripper_toggle_button", 0),
+            ("enable_button", 1),
+            ("arm_select_button", 0),
+            ("mode_button", 3),
+            ("axis_x", 2),
+            ("axis_y", 3),
+            ("trigger_up_button", 9),
+            ("trigger_down_button", 8),
+            ("gripper_toggle_button", 6),
             ("joint_jog_axis_x_joint", "wrist_flex_joint"),
             ("joint_jog_axis_y_joint", "wrist_roll_joint"),
             ("joint_jog_dpad_x_axis", 6),
@@ -67,8 +67,8 @@ class ArmServoTeleop(Node):
         self.mode_button = p("mode_button").value
         self.axis_x = p("axis_x").value
         self.axis_y = p("axis_y").value
-        self.axis_z_up = p("axis_z_up").value
-        self.axis_z_down = p("axis_z_down").value
+        self.trigger_up_button = p("trigger_up_button").value
+        self.trigger_down_button = p("trigger_down_button").value
         self.gripper_toggle_button = p("gripper_toggle_button").value
         self.jj_axis_x_joint = p("joint_jog_axis_x_joint").value
         self.jj_axis_y_joint = p("joint_jog_axis_y_joint").value
@@ -205,10 +205,9 @@ class ArmServoTeleop(Node):
             msg.header.frame_id = "base_footprint"
             msg.twist.linear.x = self.axis(self.axis_x)
             msg.twist.linear.y = self.axis(self.axis_y)
-            # Two independent half-axes (e.g. separate L2/R2 trigger axes), each contributing
-            # only its positive engagement - simpler and less layout-dependent than assuming a
-            # shared axis's rest/pressed polarity, which varies by controller/driver.
-            msg.twist.linear.z = max(0.0, self.axis(self.axis_z_up)) - max(0.0, self.axis(self.axis_z_down))
+            # LT/RT report as plain digital buttons on this controller/driver, not analog axes -
+            # full-scale while held, not proportional.
+            msg.twist.linear.z = float(self.button(self.trigger_up_button)) - float(self.button(self.trigger_down_button))
             self.twist_pubs[self.arm].publish(msg)
         else:
             names, vels = [], []

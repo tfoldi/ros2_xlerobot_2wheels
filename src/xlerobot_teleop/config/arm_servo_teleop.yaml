@@ -8,9 +8,10 @@
 #
 # That leaves A(0)/B(1)/X(3)/LB(6) confirmed-free, used for the four button roles below.
 #
-# Every axis value below (stick/trigger/D-pad) is STILL an unverified guess - only the buttons
-# above have been confirmed. Verify with `ros2 topic echo /joy` while actually moving each stick/
-# trigger/D-pad direction before trusting any axis number here.
+# Axes confirmed too (2026-10-03): left stick [0,1] (joystick.yaml's, not read here), right
+# stick [2,3], D-pad [6,7]. LT/RT report as plain digital buttons on this controller/driver, not
+# analog axes - buttons 8 and 9, not axis indices, see trigger_up_button/trigger_down_button
+# below.
 #
 # Left stick (axes 0/1, per joystick.yaml) already drives the base - this node never reads those,
 # so holding both the drive deadman and this node's enable_button at once is safe, they don't
@@ -23,23 +24,21 @@ arm_servo_teleop:
                                 # JOINT_JOG - the one that isn't singularity-prone, see project memory)
 
     # Right stick - Cartesian jog (TWIST mode) or two joints (JOINT_JOG mode, see below).
-    # UNVERIFIED GUESS.
-    axis_x: 3
-    axis_y: 4
-    # Z axis for TWIST mode - most layouts put L2/R2 here (trigger axes), separate from the
-    # right stick so all three Cartesian dimensions are available without a mode chord.
-    # UNVERIFIED GUESS.
-    axis_z_up: 5
-    axis_z_down: 2
+    axis_x: 2
+    axis_y: 3
+    # Z axis for TWIST mode - LT/RT, digital buttons on this controller (not axes, see above),
+    # full-scale while held rather than proportional.
+    trigger_up_button: 9    # RT
+    trigger_down_button: 8  # LT
 
     # Gripper - tap while held to toggle open/closed (open=-0.7 rad, closed=0.35 rad, matches
     # the SRDF's open/closed named states for {arm}_gripper, see tools/goto_position.py).
     gripper_toggle_button: 6   # LB
 
     # JOINT_JOG mode: right stick drives these two joints directly (axis_x -> first, axis_y ->
-    # second); D-pad (axes 6/7 on most layouts, UNVERIFIED GUESS) drives the other two. No
-    # joint-select step, so not every joint is reachable from the stick alone in v1 - wrist_roll
-    # and the gripper still need their own test via tools/single_joint_test.py for fine control.
+    # second); D-pad (axes 6/7, confirmed) drives the other two. No joint-select step, so not
+    # every joint is reachable from the stick alone in v1 - wrist_roll and the gripper still
+    # need their own test via tools/single_joint_test.py for fine control.
     joint_jog_axis_x_joint: wrist_flex_joint
     joint_jog_axis_y_joint: wrist_roll_joint
     joint_jog_dpad_x_axis: 6
