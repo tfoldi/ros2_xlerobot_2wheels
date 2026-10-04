@@ -4,8 +4,9 @@ Exposes navigation, both arms, the gripper and the USB cameras as MCP tools, so 
 drive the robot directly instead of a human running `tools/*.py` scripts by hand. See
 `server.py`'s docstring for the full tool list and what each one needs running.
 
-Scope: orchestration, control and perception. Spatial memory (remembering where objects were
-seen) is a separate, later slice.
+Scope: orchestration, control and perception, including spatial memory (`remember_object`/
+`recall_objects`/`forget_object` - best-effort object positions without a depth sensor, via
+plane-assumption or multi-observation triangulation, see `spatial_memory_math.py`).
 
 ## Setup
 
@@ -60,7 +61,9 @@ two `source` lines in `run.sh` to match your ROS install and venv location, and 
 4. `ros2 launch xlerobot_teleop mcp_presence.launch.py` (needs `/joy` already up from step 1)
 
 Read-only tools (`list_positions`, `list_waypoints`, `get_joint_states`, `get_robot_pose`,
-`get_status`, `capture_image`) work without step 4 - they don't move anything.
+`get_status`, `capture_image`, `recall_objects`) work without step 4 - they don't move
+anything, and neither do `remember_object`/`forget_object` (same reasoning, they only read
+cached sensor/TF state and write a YAML file).
 
 ## Presence heartbeat
 
@@ -106,3 +109,11 @@ button now.
   the presence button mid-motion, confirm the goal cancels and the bus e-stops.
 - After any estop, verify with `python3 tools/calibrate_arm.py status --arm <left|right|head>`
   (stack stopped) - `get_status` is a liveness summary, not a torque-state check.
+- `capture_image` while localized: confirm `camera_pose_map`/`robot_pose_map` populate. Stop
+  `navigation.launch.py` (delocalize on purpose) and confirm a graceful `None` + `pose_note`,
+  no exception, no hang.
+- `remember_object` on a real object once: expect `"single-observation-plane-assumption"`
+  provenance. Move or pan the camera and `remember_object` the same label again: expect
+  `"triangulated"` with a plausible residual. `recall_objects` (all, one by label, and a typo'd
+  label - the last should raise a `ToolError`). `forget_object`, then call it again on the same
+  label - should raise `ToolError`.

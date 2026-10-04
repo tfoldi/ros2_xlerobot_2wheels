@@ -11,6 +11,7 @@ waits on it. See _wait_for() below.
 Motion calls are serialized through motion_lock - the robot only does one thing at a time by
 design, not a limitation worth working around.
 """
+import datetime
 import math
 import pathlib
 import sys
@@ -26,6 +27,7 @@ CAPTURE_DIR = TOOLS_DIR.parent / "captures"
 
 import cv2
 import rclpy
+import yaml
 from action_msgs.msg import GoalStatus, GoalStatusArray
 from action_msgs.srv import CancelGoal
 from cv_bridge import CvBridge
@@ -35,11 +37,15 @@ from moveit_msgs.msg import MoveItErrorCodes, PlanningOptions
 from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from sensor_msgs.msg import Image, JointState
+from rclpy.qos import QoSDurabilityPolicy, QoSProfile
+from sensor_msgs.msg import CameraInfo, Image, JointState
 from std_msgs.msg import Bool
 from std_srvs.srv import SetBool
+from tf2_ros import Buffer, TransformException, TransformListener
 
 import position_store
+import spatial_memory_math
+import spatial_memory_store
 import waypoint_store
 from goto_position import MoveError, joint_goal_request
 from move_to_pose import position_goal_request
@@ -48,6 +54,12 @@ CAMERAS = ["head", "left", "right"]
 ESTOP_BUSES = ["xlerobot_bus1", "xlerobot_bus2"]
 NAV_TERMINAL = {GoalStatus.STATUS_SUCCEEDED: "succeeded", GoalStatus.STATUS_CANCELED: "canceled",
                 GoalStatus.STATUS_ABORTED: "aborted"}
+
+# Camera name -> optical frame id, loaded once from the same config cameras.launch.py uses, so
+# this never drifts from a second hardcoded copy.
+_CAMERAS_YAML = TOOLS_DIR.parent / "src" / "xlerobot_bringup" / "config" / "cameras.yaml"
+with open(_CAMERAS_YAML) as _f:
+    CAMERA_FRAME_IDS = {name: c["frame_id"] for name, c in yaml.safe_load(_f)["cameras"].items()}
 
 
 class PresenceLost(RuntimeError):
@@ -72,9 +84,19 @@ class XleRobotBridge(Node):
         self.presence_ok = False
         self.nav_status = None
         self.camera_frames = {c: None for c in CAMERAS}
+        self.camera_info = {c: None for c in CAMERAS}
+
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
 
         self.create_subscription(JointState, "/joint_states", self._on_joint_states, 10)
-        self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self._on_amcl_pose, 10)
+        # AMCL publishes /amcl_pose with TRANSIENT_LOCAL durability (confirmed via `ros2 topic
+        # info /amcl_pose --verbose`) - the default subscription QoS is VOLATILE, which is
+        # incompatible and silently receives nothing (no error, no warning, just an empty
+        # self.amcl_pose forever). Found by testing: get_robot_pose/save_waypoint/goto_waypoint's
+        # localization-wait-loop would always time out even with AMCL fully up and localized.
+        amcl_qos = QoSProfile(depth=10, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+        self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self._on_amcl_pose, amcl_qos)
         self.create_subscription(Bool, "/mcp_presence_ok", self._on_presence, 10)
         self.create_subscription(
             GoalStatusArray, "/navigate_to_pose/_action/status", self._on_nav_status, 10)
@@ -82,6 +104,9 @@ class XleRobotBridge(Node):
             self.create_subscription(
                 Image, f"cameras/{camera}/image_raw",
                 (lambda msg, c=camera: self._on_image(c, msg)), 5)
+            self.create_subscription(
+                CameraInfo, f"cameras/{camera}/camera_info",
+                (lambda msg, c=camera: self._on_camera_info(c, msg)), 10)
 
         self.move_group = ActionClient(self, MoveGroup, "/move_action")
         self.nav_action = ActionClient(self, NavigateToPose, "navigate_to_pose")
@@ -109,6 +134,9 @@ class XleRobotBridge(Node):
 
     def _on_image(self, camera, msg):
         self.camera_frames[camera] = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+
+    def _on_camera_info(self, camera, msg):
+        self.camera_info[camera] = msg
 
     # -- generic async-future -> sync-call bridge (calling thread) ---------------------------
 
@@ -315,6 +343,18 @@ class XleRobotBridge(Node):
         x, y, yaw = self.amcl_pose
         return {"x": x, "y": y, "yaw": yaw, "frame": "map"}
 
+    def _camera_pose_in_map(self, frame_id):
+        """(pose_dict, None) or (None, error_str). Never raises: TF lookup failure (not
+        localized yet, frame not in the tree yet) is an expected, common state right after
+        bringup, not a bug. A tilting head camera needs the full 6DOF pose, not a yaw-only
+        reduction the way the planar base pose is."""
+        try:
+            t = self.tf_buffer.lookup_transform("map", frame_id, rclpy.time.Time())
+        except TransformException as e:
+            return None, str(e)
+        tr, q = t.transform.translation, t.transform.rotation
+        return {"x": tr.x, "y": tr.y, "z": tr.z, "qx": q.x, "qy": q.y, "qz": q.z, "qw": q.w}, None
+
     def get_presence(self):
         return self.presence_ok
 
@@ -345,7 +385,79 @@ class XleRobotBridge(Node):
             raise MoveError(f"no frame from cameras/{camera}/image_raw - is bringup running with cameras:=true?")
         output_path.parent.mkdir(parents=True, exist_ok=True)
         cv2.imwrite(str(output_path), frame)
-        return {"path": str(output_path), "width": frame.shape[1], "height": frame.shape[0]}
+
+        frame_id = CAMERA_FRAME_IDS[camera]
+        camera_pose_map, tf_error = self._camera_pose_in_map(frame_id)
+        result = {
+            "path": str(output_path),
+            "width": frame.shape[1],
+            "height": frame.shape[0],
+            "camera": camera,
+            "frame_id": frame_id,
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds"),
+            "camera_pose_map": camera_pose_map,  # {x,y,z,qx,qy,qz,qw} in map frame, or None
+            "robot_pose_map": self.get_robot_pose(),
+        }
+        if camera_pose_map is None:
+            result["pose_note"] = f"camera pose unavailable (not localized yet?): {tf_error}"
+        return result
+
+    # -- spatial memory (remember_object/recall_objects/forget_object) -----------------------
+    # Not presence-gated: this only reads cached sensor/TF state and writes a YAML file, it
+    # doesn't move anything - same risk class as capture_image/get_status. The precedent that IS
+    # gated (save_position/save_waypoint) is gated because that data later drives a motion
+    # command directly; a wrong spatial-memory estimate is already covered at the actual motion
+    # boundary (move_to_pose/goto_waypoint), gating the memory write would just duplicate that
+    # protection for no benefit.
+
+    def remember_object(self, label, description, camera, pixel_x=None, pixel_y=None,
+                         plane_height_m=None):
+        if camera not in CAMERAS:
+            raise ValueError(f"camera must be one of {CAMERAS}")
+        output_path = CAPTURE_DIR / f"{camera}_{int(time.time())}.png"
+        capture = self.capture_image(camera, output_path)
+
+        px = capture["width"] // 2 if pixel_x is None else pixel_x
+        py = capture["height"] // 2 if pixel_y is None else pixel_y
+        if not (0 <= px < capture["width"] and 0 <= py < capture["height"]):
+            raise ValueError(f"pixel ({px},{py}) outside image bounds {capture['width']}x{capture['height']}")
+
+        camera_info = self.camera_info[camera]
+        ray = (spatial_memory_math.pixel_to_ray_camera_frame(camera_info, px, py)
+               if camera_info is not None else None)
+
+        observation = {
+            "camera": camera, "frame_id": capture["frame_id"], "image_path": capture["path"],
+            "timestamp": capture["timestamp"],
+            "image_size": {"width": capture["width"], "height": capture["height"]},
+            "pixel": {"x": px, "y": py},
+            "camera_pose_map": capture["camera_pose_map"],
+            "robot_pose_map": capture["robot_pose_map"],
+            "ray_camera_frame": None if ray is None else {"x": float(ray[0]), "y": float(ray[1]), "z": float(ray[2])},
+            "pose_available": capture["camera_pose_map"] is not None,
+            "ray_available": ray is not None,
+        }
+
+        objects = spatial_memory_store.load()
+        entry = objects.setdefault(label, {"created_at": observation["timestamp"], "observations": []})
+        entry["description"] = description  # last-write-wins, this is working memory not curated config
+        entry["updated_at"] = observation["timestamp"]
+        entry["observations"].append(observation)
+        entry["position_estimate"] = spatial_memory_math.estimate_position(
+            entry["observations"],
+            plane_height_m or spatial_memory_math.DEFAULT_PLANE_HEIGHT_M)
+        objects[label] = entry
+        spatial_memory_store.save(objects)
+        return entry
+
+    def recall_objects(self, label=None):
+        if label is not None:
+            return {label: spatial_memory_store.get(label)}
+        return spatial_memory_store.load()
+
+    def forget_object(self, label):
+        removed = spatial_memory_store.delete(label)
+        return {"forgot": label, "observations_removed": len(removed["observations"])}
 
 
 _bridge = None

@@ -10,11 +10,13 @@ move_group, navigation.launch.py localization:=true, and mcp_presence.launch.py 
 xlerobot_teleop) for any motion tool to work.
 
 Tool surface: read-only tools (list_positions, list_waypoints, get_joint_states, get_robot_pose,
-get_status, capture_image) work with no presence button held. Every motion tool
-(goto_position, move_to_pose, move_gripper, play_sequence, goto_waypoint, save_position,
-save_waypoint) requires /mcp_presence_ok and is cancelled + the arm's bus e-stopped (or the base
-stopped) if presence lapses mid-motion. estop/release_estop are never gated - always callable,
-including to recover from a PresenceLost error.
+get_status, capture_image, recall_objects) work with no presence button held, as do
+remember_object/forget_object (they only read cached sensor/TF state and write a YAML file,
+they don't move anything). Every motion tool (goto_position, move_to_pose, move_gripper,
+play_sequence, goto_waypoint, save_position, save_waypoint) requires /mcp_presence_ok and is
+cancelled + the arm's bus e-stopped (or the base stopped) if presence lapses mid-motion.
+estop/release_estop are never gated - always callable, including to recover from a
+PresenceLost error.
 
 Every tool takes an optional `reason` argument and every call is appended to
 logs/mcp_calls.jsonl (tool, arguments, reason, outcome, timing) via call_log.py - see
@@ -118,8 +120,10 @@ def get_status(reason: str = "") -> dict:
 @catch_bridge_errors
 def capture_image(camera: str, reason: str = "") -> dict:
     """Grab the latest frame from a camera (head, left, right - the arm wrist cams) and save it
-    as a PNG under captures/. Returns the file path to read directly. No presence needed - this
-    doesn't move anything."""
+    as a PNG under captures/. Returns path/width/height plus spatial context: the camera's own
+    pose in map frame (camera_pose_map, from TF - None with a pose_note if not localized yet)
+    and the robot's base pose (robot_pose_map). No presence needed - this doesn't move
+    anything."""
     output = bridge.CAPTURE_DIR / f"{camera}_{int(time.time())}.png"
     return bridge.get_bridge().capture_image(camera, output)
 
@@ -188,6 +192,43 @@ def save_waypoint(name: str, reason: str = "") -> str:
     """Save the robot's current localized pose as a named waypoint, for later goto_waypoint
     calls. Requires /amcl_pose and the presence heartbeat."""
     return bridge.get_bridge().save_waypoint(name)
+
+
+@mcp.tool()
+@logged
+@catch_bridge_errors
+def remember_object(label: str, description: str, camera: str, pixel_x: int | None = None,
+                     pixel_y: int | None = None, plane_height_m: float | None = None,
+                     reason: str = "") -> dict:
+    """Capture a frame from `camera` and record it as an observation of `label` (creates the
+    entry if new, appends if `label` already exists - same label = same object, this is agent-
+    driven identity, no automatic re-identification). pixel_x/pixel_y default to the image
+    center. Returns the updated entry, including a best-effort 3D position estimate: a single
+    observation assumes a horizontal plane at plane_height_m (default ~0.75m, override for
+    floor/shelf items); a second observation from a different-enough viewpoint triangulates a
+    real depth instead - check the returned provenance/confidence fields either way, a low-
+    confidence plane-assumption estimate is still returned, never withheld. No presence needed -
+    this doesn't move anything, same as capture_image/get_status."""
+    return bridge.get_bridge().remember_object(label, description, camera, pixel_x, pixel_y, plane_height_m)
+
+
+@mcp.tool()
+@logged
+@catch_bridge_errors
+def recall_objects(label: str = "", reason: str = "") -> dict:
+    """List remembered objects (or one by label) with their position estimate, provenance/
+    confidence, and full observation history. No presence needed."""
+    return bridge.get_bridge().recall_objects(label or None)
+
+
+@mcp.tool()
+@logged
+@catch_bridge_errors
+def forget_object(label: str, reason: str = "") -> dict:
+    """Delete a remembered object. This is agent working memory, not curated config - plain
+    deletion, no confirmation/undo. Does not delete the referenced image files under captures/.
+    No presence needed."""
+    return bridge.get_bridge().forget_object(label)
 
 
 @mcp.tool()
