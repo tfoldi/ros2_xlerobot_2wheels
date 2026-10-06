@@ -23,9 +23,10 @@
   <xacro:arg name="use_sim"           default="false"/>
   <xacro:arg name="bus1_port"         default="/dev/xle-bus1"/>
   <xacro:arg name="bus2_port"         default="/dev/xle-bus2"/>
-  <!-- none | usbcam | vlp16 | gemini | realsense, see ADR-0003. usbcam is the head
-       camera the robot has today. -->
-  <xacro:arg name="sensor"            default="usbcam"/>
+  <!-- none | usbcam | vlp16 | gemini | realsense, see ADR-0003. gemini (Orbbec Gemini 2)
+       is the head camera the robot has today - it physically replaced the usbcam
+       2026-10-05. -->
+  <xacro:arg name="sensor"            default="gemini"/>
   <!-- none | ld19, the 2D lidar under the second basket -->
   <xacro:arg name="lidar"             default="ld19"/>
   <!-- arms are phase 3, description only for now -->

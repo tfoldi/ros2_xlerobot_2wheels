@@ -77,8 +77,31 @@
     </xacro:if>
 
     <xacro:if value="${sensor == 'gemini'}">
-      <!-- same mount point, different body size, see ADR-0003 for whether this
-           camera works on Jazzy at all -->
+      <!-- Orbbec Gemini 2 (confirmed via its own firmware + the vendor driver's device
+           table, 2026-10-05 - project docs previously misidentified this as the original
+           Gemini, see ADR-0003). Box size is a first-cut placeholder, not yet measured
+           against the real unit - refine once it's mounted and visible.
+
+           Unlike usbcam/realsense above, this link is NOT the camera's optical frame -
+           it's named head_camera_link (project convention for "sits on head_camera_mount")
+           but then connects, with identity rotation, to a second link named exactly
+           "head_link": the orbbec_camera driver (gemini2.launch.py) publishes its own
+           calibrated extrinsic TF tree rooted at "<camera_name>_link", not a fixed
+           "camera_link" as first assumed - confirmed live only after passing
+           camera_name:="head" (cameras.launch.py's actual invocation, needed for topic
+           naming), which renames every frame in the tree with that prefix: head_link ->
+           head_depth_frame -> head_{color,ir}_frame -> head_{color,ir}_optical_frame,
+           plus head_{accel,gyro}_frame/_optical_frame. An earlier standalone test left
+           camera_name at its own default ("camera"), which happened to render as
+           "camera_link" and looked like a hardcoded constant - it wasn't. So this URDF
+           only needs to place head_link at the right physical pose - the driver handles
+           every per-stream optical frame itself, unlike usbcam/realsense which need the
+           REP-103 remap done by hand below.
+
+           Identity rotation here is the first-cut assumption matching the camera's
+           physical mount (3D-printed holder cut down flat, camera sits horizontal,
+           forward axis assumed aligned with head_camera_mount's own forward axis) -
+           tune this rpy by hand once the real pointing direction is visible. -->
       <link name="head_camera_link">
         <visual>
           <geometry><box size="0.035 0.165 0.030"/></geometry>
@@ -97,11 +120,11 @@
         <child  link="head_camera_link"/>
         <origin xyz="0 0 0" rpy="0 0 0"/>
       </joint>
-      <link name="head_camera_optical_frame"/>
-      <joint name="head_camera_optical_joint" type="fixed">
+      <link name="head_link"/>
+      <joint name="head_link_joint" type="fixed">
         <parent link="head_camera_link"/>
-        <child  link="head_camera_optical_frame"/>
-        <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
+        <child  link="head_link"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
       </joint>
     </xacro:if>
 

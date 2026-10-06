@@ -143,6 +143,7 @@ def generate_launch_description():
     foxglove = LaunchConfiguration("foxglove")
     cameras = LaunchConfiguration("cameras")
     lidar = LaunchConfiguration("lidar")
+    sensor = LaunchConfiguration("sensor")
 
     # Relative to wherever `ros2 launch` is run from - this repo's own convention (see
     # tools/*.py) is always the repo root, where bags/ is gitignored.
@@ -159,6 +160,7 @@ def generate_launch_description():
             " with_arms:=", with_arms,
             " torque_off:=", torque_off,
             " with_head:=", with_head,
+            " sensor:=", sensor,
         ]),
         value_type=str,
     )
@@ -184,6 +186,10 @@ def generate_launch_description():
         DeclareLaunchArgument("record", default_value="false"),
         DeclareLaunchArgument("foxglove", default_value="false"),
         DeclareLaunchArgument("cameras", default_value="false"),
+        # usbcam | gemini, see xlerobot.urdf.xacro - gemini (Orbbec Gemini 2) is the head
+        # camera the robot has today, physically replaced the usbcam 2026-10-05. Also
+        # selects which driver cameras.launch.py brings up for "head" - see its own docstring.
+        DeclareLaunchArgument("sensor", default_value="gemini"),
         DeclareLaunchArgument("lidar", default_value="false"),
 
         # Must run before the Node actions below: OpaqueFunction is resolved
@@ -241,6 +247,7 @@ def generate_launch_description():
 
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(cameras_launch_file),
+            launch_arguments={"sensor": sensor}.items(),
             condition=IfCondition(cameras),
         ),
 

@@ -387,14 +387,12 @@ not settled.
 
 **On hand:**
 
-- **Orbbec Gemini**, USB `2bc5:0670`, USB 2.0, serial AY6G65301J0. This is the original
-  structured light Gemini, not a Gemini 2 and not a 330 series. It is **not** in the
-  OrbbecSDK **v2** device list. The `OrbbecSDK_ROS2` `main` branch (SDK v1 path) does ship
-  `gemini.launch.py` and claims Foxy / Humble / Jazzy, so it may well stream. Open questions:
-  whether depth and colour are hardware synced with usable timestamps, whether registered
-  depth to colour is available, whether USB 2.0 holds a useful resolution and rate, and
-  whether cuVSLAM's RGB-D mode takes it. The original Gemini also has no IMU, which §4.1
-  wants. **Worth an evening to test, might be free.**
+- **Orbbec Gemini 2**, USB `2bc5:0670`, serial AY6G65301J0, firmware 1.4.92. Originally
+  misidentified here as the original (non-2) Gemini - corrected 2026-10-05, confirmed from
+  the device's own firmware response, not inferred. Fully supported by the official
+  `ros-jazzy-orbbec-camera` apt package, `gemini2.launch.py`, no patching needed. Live-tested:
+  color/depth/IR/point cloud/IMU all streaming real data. Now the robot's actual head camera,
+  see [ADR-0003](docs/decisions/0003-perception-sensor.md).
 - **Velodyne VLP-16.** Definitely works. `velodyne` → `pointcloud_to_laserscan` →
   `slam_toolbox` → Nav2 is the most predictable path and needs no NVIDIA stack. Costs
   ~830 g and ~8 W on a battery powered servo cart, plus bulk, plus no cuVSLAM.
@@ -403,10 +401,9 @@ not settled.
   these two (`Gimbal_Pitch_Holder_d435.stl`, `Gimbal_Pitch_Holder_d455.stl`), with a
   commented out `RealSenseCameraConfig` head camera already in the lerobot config.
 
-**Suggested order:** bring up Nav2 on the VLP-16 first. It separates "is my odometry sane"
-from "does my camera work", and a known good scan matcher is the measuring tool for §1.4 and
-§4.1. Test the Gemini in parallel. Move to cuVSLAM and nvblox once there is a camera for it.
-[ADR-0003](docs/decisions/0003-perception-sensor.md).
+The Gemini 2 is confirmed working and is the robot's head camera now - cuVSLAM and nvblox
+are unblocked (no longer gated on "once there is a camera for it"), still separate, not yet
+started, adoption decisions. [ADR-0003](docs/decisions/0003-perception-sensor.md).
 
 ---
 
@@ -447,7 +444,7 @@ safe to run again after applying a suggestion, to converge over a couple of iter
 | R2 | Upstream: both hardware instances share a hardcoded internal node name and collide on `/emergency_stop`. Fork: per-instance names, but each e-stop covers its own bus only | One instance's e-stop doesn't reach the other bus | Don't build the safety supervisor around this service; use `controller_manager`'s `switch_controller` instead, see §4.4. |
 | R3 | Bus 2 contention, arms starve wheel updates | Odometry jitter while manipulating | Instrument from day one. Split controller managers by rate. |
 | R4 | ~~`wheel_radius` really is 0.0635 not 0.05~~ Measured (0.0625) and spot-checked at 1 m (§1.4) | Only the full 5 m+ calibration run from §6 is still outstanding | Run the §6 procedure before trusting odometry past a few meters. |
-| R5 | Gemini unusable for cuVSLAM (§5) | No Isaac VSLAM without buying | VLP-16 + slam_toolbox is enough for navigation. Isaac is an upgrade, not a dependency. |
+| R5 | ~~Gemini unusable for cuVSLAM (§5)~~ Resolved 2026-10-05: it's a Gemini 2 (misidentified before), confirmed working, color/depth/IR/IMU all live | cuVSLAM/nvblox adoption itself is still a separate, not-yet-started decision | n/a - lidar + slam_toolbox remains the navigation baseline either way, Isaac is an upgrade, not a dependency. |
 | R6 | Servo thermal limits under long navigation | Shutdown mid mission, maybe damage | Safety supervisor in phase 1, not later (§4.4). |
 | R7 | Top heavy cart tips under hard acceleration | Broken hardware | Conservative accel limits in `diff_drive_controller` and the velocity smoother from the start. |
 | R8 | Upstream says 0.4.0 is the last Feetech / SO101 chassis version | Platform moves to brushless | Keep the hardware behind `ros2_control`, then a brushless base swaps one plugin instead of the stack. The ODrive variant already exists upstream. |

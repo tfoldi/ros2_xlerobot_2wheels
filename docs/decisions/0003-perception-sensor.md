@@ -1,25 +1,44 @@
-# ADR-0003: Perception sensor deferred, stack stays sensor agnostic
+# ADR-0003: Perception sensor - Orbbec Gemini 2
 
-- Status: Open, decision deferred to end of phase 1
-- Date: 2026-09-20
+- Status: Accepted
+- Date: 2026-09-20, resolved 2026-10-05
 
 ## Context
 
 SLAM and Nav2 need a sensor. Three candidates, two already on hand.
 
-### Orbbec Gemini (have it)
+### Orbbec Gemini 2 (have it)
 
-USB `2bc5:0670`, `iProduct` "Orbbec(R) Gemini(TM)", bcdUSB 2.00, serial AY6G65301J0. This is
-the original structured light Gemini, not a Gemini 2, not a 330 series.
+USB `2bc5:0670`, `iProduct` "Orbbec(R) Gemini(TM)", bcdUSB 2.00, serial AY6G65301J0.
 
-- Not in the OrbbecSDK v2 supported device table. v2 supports Gemini 2/2L, Gemini
-  210/215/305/330/335/336/338/345/435Le, Astra 2, Femto Bolt/Mega, Astra Mini Pro.
-- `OrbbecSDK_ROS2` `main` branch (SDK v1 path) does ship `gemini.launch.py` and claims Foxy /
-  Humble / Jazzy. So it might enumerate and stream.
-- Open questions that decide it: hardware depth/colour sync and trustworthy timestamps,
-  registered depth to colour availability, whether USB 2.0 holds a useful resolution and
-  rate, whether cuVSLAM's RGB-D mode accepts it. No IMU either, which §4.1 wants for a usable
-  odom frame.
+**Correction (2026-10-05): this is a Gemini 2, not the original Gemini.** It was
+misidentified here on first read, from the `iProduct` string alone not mentioning "2" -
+that was the wrong signal to go on. Confirmed from the device's own firmware response via
+the official vendor driver, not inferred: `ros2 launch orbbec_camera gemini2.launch.py`
+logs `Device Orbbec Gemini 2 connected`, serial `AY6G65301J0` (same unit), firmware
+`1.4.92`. Independently corroborated by the vendor driver's own udev rules and device
+config (`ros-jazzy-orbbec-camera`'s `99-obsensor-libusb.rules` maps idProduct `0670` to
+`SYMLINK+="Gemini_2"`; `config/depthfilter/Gemini2_v1.7.json` is keyed to
+`vid: 0x2bc5, pid: 0x0670`) - this is the vendor's own authoritative device table, not a
+web search summary (one early search-tool summary during this investigation incorrectly
+claimed the original Gemini had a dedicated `gemini.launch.py` in the current
+`OrbbecSDK_ROS2` repo; reading the actual repo directly showed no such file exists in
+either branch - a different, now-irrelevant project from the one that matters here).
+
+Also explains why it has an IMU (confirmed live: accel + gyro streams) - the original
+Gemini doesn't, the Gemini 2 does, matching real spec rather than the original wrong
+identification.
+
+- **Is** in `ros-jazzy-orbbec-camera`'s (apt, both arm64/x86_64, already installed on both
+  machines) supported-device set - `gemini2.launch.py`, no source build, no patching.
+- Live-tested on real hardware: color (1280x720 @ ~24Hz, MJPG), depth (1280x720 @ ~20Hz,
+  real 16-bit, hardware-registered to color by default), point cloud (~8Hz), IR, IMU
+  (accel+gyro) - all streaming real data. Needs a one-time per-machine udev rule install
+  (`sudo cp .../99-obsensor-libusb.rules /etc/udev/rules.d/`, see
+  `xlerobot_bringup/launch/cameras.launch.py`'s docstring) - without it the device doesn't
+  get correct permissions.
+- Depth/colour sync, registration, and resolution/rate questions from the original "open
+  questions" below are now answered: yes to all, confirmed live.
 
 ### Velodyne VLP-16 (have it)
 
@@ -35,27 +54,37 @@ fusion wants, and upstream XLeRobot already ships head gimbal mounts for exactly
 (`Gimbal_Pitch_Holder_d435.stl`, `Gimbal_Pitch_Holder_d455.stl`), with a commented out
 `RealSenseCameraConfig` head camera stanza already in the lerobot config.
 
-## Decision (provisional)
+## Decision
 
-Not deciding yet. `xlerobot_perception` picks the sensor at launch and carries a config per
-candidate. Phase 1 needs none of them.
+Orbbec Gemini 2, confirmed working. It physically replaced the plain USB webcam as the
+head camera (2026-10-05 - 3D-printed holder cut down to a flat mount, camera screwed
+directly to it). `xlerobot.urdf.xacro`'s `sensor` arg defaults to `gemini`; `cameras.yaml`'s
+`head` entry and `cameras.launch.py`'s `sensor:=usbcam|gemini` switch give a path back to
+the plain webcam if ever needed. See `xlerobot_bringup/launch/cameras.launch.py` and
+`xlerobot_description/urdf/sensors.xacro` for the integration (the driver publishes its own
+calibrated extrinsic TF tree rooted at a link named `<camera_name>_link`, i.e. `head_link`
+here since `camera_name:="head"` - not a fixed `camera_link` as first assumed from a
+standalone test that left `camera_name` at its own default - the URDF only places that one
+link at the physical mount point, not per-stream optical frames by hand. Also needs
+`enable_publish_extrinsic:=true`, passed explicitly in `cameras.launch.py` - the vendor
+launch file's own default is `false`, which silently advertises `/tf`/`/tf_static` without
+ever publishing anything on them).
 
-Order:
-
-1. Phase 2 primary: VLP-16. Separates "is my odometry sane" from "does my camera work", a
-   known good scan matcher is the measuring tool for the wheel radius and multi-turn
-   position questions (ARCHITECTURE §1.4, §4.1). Debugging both at once is avoidable.
-2. In parallel: test the Gemini. An evening. If depth streams on Jazzy with usable sync, it
-   might do for RGB-D cuVSLAM and nothing needs buying.
-3. If the Gemini fails: buy a D435i, the mount already exists.
+The 2D-lidar-primary path mentioned below (originally VLP-16, now the lighter LD19 under the
+second basket - see `xlerobot.urdf.xacro`'s `lidar` arg) already shipped independently of
+this decision and is unaffected by it.
 
 ## Consequences
 
-- Phase 2 targets a 2D `LaserScan` interface, which both the lidar and a depth camera can
-  produce, so the Nav2 config doesn't need rewriting when the sensor changes.
-- cuVSLAM and nvblox are phase 4, explicitly optional. Navigation doesn't depend on them.
-- The head gimbal design constrains camera choice more than the software does.
+- Nav2 still runs off the 2D lidar unchanged - this decision is about the head camera/depth
+  sensor specifically, not navigation's primary obstacle source.
+- cuVSLAM, nvblox, and depth-aware planning are now actually unblocked (previously gated on
+  "once there is a camera for it") - still separate adoption decisions, not started by this
+  ADR, just no longer blocked on a sensor question.
+- Camera mount position/orientation in the URDF is a first-cut placeholder (identity
+  rotation, un-measured box collision geometry) pending hands-on tuning now that it's
+  physically mounted and visible - not yet precise.
 
 ## Resolve by
 
-End of phase 1, once the Gemini test result is in.
+Resolved 2026-10-05.
