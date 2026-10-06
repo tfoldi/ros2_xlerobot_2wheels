@@ -27,6 +27,11 @@ Camera video is taken from the ffmpeg_image_transport topics
 video stream, so nothing is decoded or re-encoded here. Cameras are found
 while running, so they can start after the bridge.
 
+The head camera's depth stream (<camera>/depth/image_raw, 16-bit, hardware-registered to
+color) is logged alongside its color video and camera_info at the same entity, so the
+viewer back-projects it into a colored 3D point cloud on its own - no point cloud topic
+is subscribed to or parsed here.
+
 The Logs tab is two side-by-side panels sharing the same ros_time timeline: ROS2
 Log (/rosout, every node's log messages) and MCP Calls (tools/mcp_server's own
 call_log.py audit trail, logs/mcp_calls.jsonl, tailed from disk - the MCP server
@@ -63,7 +68,7 @@ from rcl_interfaces.msg import Log
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from rerun.blueprint.components import PlayState
-from sensor_msgs.msg import CameraInfo, JointState, LaserScan
+from sensor_msgs.msg import CameraInfo, Image, JointState, LaserScan
 from std_msgs.msg import String
 from tf2_msgs.msg import TFMessage
 
@@ -81,6 +86,11 @@ MAP_ENTITIES = ("world/map/occupied", "world/map/free", "world/particles")
 MAP_TF_PERIOD = 0.2  # s, slam_toolbox publishes map -> odom at 50 Hz
 JOINT_TRANSFORM_PERIOD = 1.0 / 30  # s, /joint_states arrives at 100 Hz, 30 Hz is smooth enough
 CAMERAS = ("head", "left", "right")
+DEPTH_CAMERAS = ("head",)  # left/right are plain 2D wrist webcams, no depth stream
+DEPTH_LOG_PERIOD = 1.0 / 8  # s, matches the driver's own depth/points rate - raw depth/image_raw
+# arrives at ~20-26Hz uncompressed (1280x720 16UC1, no ffmpeg transport for it), logging every
+# frame was the same mistake that caused the 90s joint-state latency bug below - throttle it.
+DEPTH_METER = 1000.0  # Orbbec depth is millimeters (OpenNI/RealSense convention), not measured
 FFMPEG_TYPE = "ffmpeg_image_transport_msgs/msg/FFMPEGPacket"
 AV_PKT_FLAG_KEY = 1
 
@@ -288,6 +298,18 @@ class RerunBridge(Node):
                 CameraInfo, f"cameras/{name}/camera_info",
                 lambda msg, name=name: self.on_camera_info(msg, name), qos_profile_sensor_data)
 
+        # Depth, logged to the same entity as that camera's Pinhole/video (both are
+        # head_color_optical_frame - depth is hardware-registered to color by default, confirmed
+        # live via camera_info). rr.DepthImage under a Pinhole ancestor back-projects into a
+        # colored 3D point cloud automatically on the viewer side - already covers "point cloud"
+        # for free, without this bridge parsing depth/points (PointCloud2, ~920k XYZ points/frame)
+        # off the Jetson itself.
+        self.last_depth_log_time = {}
+        for name in DEPTH_CAMERAS:
+            self.create_subscription(
+                Image, f"cameras/{name}/depth/image_raw",
+                lambda msg, name=name: self.on_depth_image(msg, name), qos_profile_sensor_data)
+
     def on_camera_info(self, msg: CameraInfo, name):
         if name in self.pinhole_logged:
             return
@@ -303,6 +325,18 @@ class RerunBridge(Node):
             static=True)
         self.pinhole_logged.add(name)
         self.get_logger().info(f"logged camera frustum for {name} (fx={fx:.1f}, fy={fy:.1f})")
+
+    def on_depth_image(self, msg: Image, name):
+        now = self.get_clock().now().nanoseconds / 1e9
+        if now - self.last_depth_log_time.get(name, 0.0) < DEPTH_LOG_PERIOD:
+            return
+        self.last_depth_log_time[name] = now
+        if msg.encoding != "16UC1":
+            self.get_logger().warning(f"cameras/{name}/depth: unexpected encoding {msg.encoding!r}, skipping")
+            return
+        depth = np.frombuffer(msg.data, dtype=np.uint16).reshape(msg.height, msg.width)
+        self.set_time(msg.header)
+        rr.log(f"cameras/{name}", rr.DepthImage(depth, meter=DEPTH_METER))
 
     def on_rosout(self, msg: Log):
         stamp = msg.stamp.sec + msg.stamp.nanosec / 1e9
@@ -351,6 +385,11 @@ class RerunBridge(Node):
 
     def find_cameras(self):
         for topic, types in self.get_topic_names_and_types():
+            if "/depth/" in topic:
+                # the orbbec driver exposes an ffmpeg_image_transport encoding of depth too, but
+                # squeezing 16-bit depth through an 8-bit video codec isn't a valid video - depth
+                # is logged properly (raw 16UC1) by on_depth_image instead.
+                continue
             if FFMPEG_TYPE in types and topic not in self.video_subs:
                 # /cameras/left/image_raw/ffmpeg -> cameras/left
                 path = topic.strip("/").removesuffix("/image_raw/ffmpeg").removesuffix("/ffmpeg")
