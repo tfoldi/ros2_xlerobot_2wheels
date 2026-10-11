@@ -32,7 +32,6 @@ from home_marker_common import (
 )
 
 SAMPLES = 15
-HEAD_CAMERA_FRAME = "head_camera_optical_frame"
 
 
 class HomeMarkerCalibrate(Node):
@@ -41,6 +40,10 @@ class HomeMarkerCalibrate(Node):
         self.bridge = CvBridge()
         self.camera_matrix = None
         self.dist_coeffs = None
+        self.camera_frame = None  # read from camera_info's own header - not hardcoded, so this
+        # works unchanged whichever sensor cameras.yaml's "head" entry points at right now
+        # (usbcam's head_camera_optical_frame, the Gemini 2's head_color_optical_frame, or a
+        # future RealSense's own frame name).
         self.frame = None
         self.create_subscription(CameraInfo, "cameras/head/camera_info", self.on_camera_info, 10)
         self.create_subscription(Image, "cameras/head/image_raw", self.on_image, 10)
@@ -50,6 +53,7 @@ class HomeMarkerCalibrate(Node):
     def on_camera_info(self, msg):
         self.camera_matrix = np.array(msg.k).reshape(3, 3)
         self.dist_coeffs = np.array(msg.d)
+        self.camera_frame = msg.header.frame_id
 
     def on_image(self, msg):
         self.frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
@@ -74,9 +78,9 @@ def main():
             continue
         rvec, tvec = pose
         try:
-            transform = node.tf_buffer.lookup_transform("map", HEAD_CAMERA_FRAME, rclpy.time.Time())
+            transform = node.tf_buffer.lookup_transform("map", node.camera_frame, rclpy.time.Time())
         except LookupException as e:
-            sys.exit(f"no TF map -> {HEAD_CAMERA_FRAME} yet: {e} - is localization:=true running "
+            sys.exit(f"no TF map -> {node.camera_frame} yet: {e} - is localization:=true running "
                       "and AMCL publishing map -> odom?")
         t_map_cam = transform_to_matrix(transform.transform)
         t_cam_marker = rvec_tvec_to_matrix(rvec, tvec)

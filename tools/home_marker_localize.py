@@ -10,12 +10,14 @@ parked - that's the point, it does not need to be a known/marked spot, just some
 camera can see the marker from. Needs tools/home_marker_calibrate.py to have been run at least
 once already (src/xlerobot_navigation/config/home_marker.yaml must exist).
 
-Math: this uses head_camera_optical_frame -> base_footprint from TF, which is a static/kinematic
-chain through the current head pan/tilt joint_states - it does NOT depend on map or AMCL being
-localized at all, unlike home_marker_calibrate.py's map -> head_camera_optical_frame lookup. That
-asymmetry is exactly what lets this tool bootstrap AMCL from cold: map_to_marker (saved, fixed)
-composed with marker_to_camera (this frame's detection) composed with camera_to_base (always
-available) gives map_to_base without ever needing AMCL's own (not-yet-correct) belief.
+Math: this uses the head camera's own optical frame (read live from camera_info's header, same
+as home_marker_calibrate.py - not hardcoded, so this works unchanged across usbcam/Gemini
+2/RealSense) -> base_footprint from TF, which is a static/kinematic chain through the current
+head pan/tilt joint_states - it does NOT depend on map or AMCL being localized at all, unlike
+home_marker_calibrate.py's map -> camera lookup. That asymmetry is exactly what lets this tool
+bootstrap AMCL from cold: map_to_marker (saved, fixed) composed with marker_to_camera (this
+frame's detection) composed with camera_to_base (always available) gives map_to_base without
+ever needing AMCL's own (not-yet-correct) belief.
 """
 import math
 import sys
@@ -31,7 +33,6 @@ from tf2_ros import Buffer, LookupException, TransformListener
 
 from home_marker_common import detect_marker_pose, load_marker_pose, matrix_to_xy_yaw, rvec_tvec_to_matrix, transform_to_matrix
 
-HEAD_CAMERA_FRAME = "head_camera_optical_frame"
 BASE_FRAME = "base_footprint"
 SAMPLES = 10
 
@@ -48,6 +49,7 @@ class HomeMarkerLocalize(Node):
         self.bridge = CvBridge()
         self.camera_matrix = None
         self.dist_coeffs = None
+        self.camera_frame = None  # read from camera_info's own header, see home_marker_calibrate.py
         self.frame = None
         self.create_subscription(CameraInfo, "cameras/head/camera_info", self.on_camera_info, 10)
         self.create_subscription(Image, "cameras/head/image_raw", self.on_image, 10)
@@ -58,6 +60,7 @@ class HomeMarkerLocalize(Node):
     def on_camera_info(self, msg):
         self.camera_matrix = np.array(msg.k).reshape(3, 3)
         self.dist_coeffs = np.array(msg.d)
+        self.camera_frame = msg.header.frame_id
 
     def on_image(self, msg):
         self.frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
@@ -84,9 +87,9 @@ def main():
             continue
         rvec, tvec = pose
         try:
-            transform = node.tf_buffer.lookup_transform(HEAD_CAMERA_FRAME, BASE_FRAME, rclpy.time.Time())
+            transform = node.tf_buffer.lookup_transform(node.camera_frame, BASE_FRAME, rclpy.time.Time())
         except LookupException as e:
-            sys.exit(f"no TF {HEAD_CAMERA_FRAME} -> {BASE_FRAME} yet: {e} - is bringup running "
+            sys.exit(f"no TF {node.camera_frame} -> {BASE_FRAME} yet: {e} - is bringup running "
                       "with with_head:=true and publishing joint_states?")
         t_cam_marker = rvec_tvec_to_matrix(rvec, tvec)
         t_marker_cam = np.linalg.inv(t_cam_marker)
