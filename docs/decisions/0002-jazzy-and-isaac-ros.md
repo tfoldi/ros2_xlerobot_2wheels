@@ -1,7 +1,7 @@
 # ADR-0002: ROS 2 Jazzy for the stack, JetPack path for the actual Orin NX split into phases
 
-- Status: Accepted, with a real gap called out below
-- Date: 2026-09-20, updated 2026-09-20
+- Status: Accepted, JetPack gap resolved
+- Date: 2026-09-20, updated 2026-09-20, JetPack gap resolved 2026-10-11
 
 ## Context
 
@@ -30,7 +30,7 @@ Jazzy for the stack, unconditionally. `ros2_control`, `sts_hardware_interface`,
 run in a Jazzy container on the Orin NX right now, no reflash needed.
 
 Isaac ROS specifically (phase 4, cuVSLAM/nvblox/cuMotion) is deferred, decision made when
-phase 4 actually starts, not now. Two paths kept open:
+phase 4 actually starts, not now. Two paths were kept open:
 
 1. Reflash to JetPack 7.2. Keeps everything on Jazzy, matches the dev box, matches where
    Isaac ROS is going. Cost is a full reflash and some early-adopter risk on a 3 month old
@@ -39,6 +39,12 @@ phase 4 actually starts, not now. Two paths kept open:
    bridge to the Jazzy graph over topics. DDS/RTPS wire compatibility between Humble and
    Jazzy usually works fine for plain message types (sensor_msgs, geometry_msgs, nav_msgs),
    so this is two ROS graphs to maintain, not two incompatible stacks.
+
+**Path 1 taken, 2026-10-11.** The Orin NX is reflashed to JetPack 7.2 (L4T 39.2.0, Ubuntu
+24.04 base, CUDA 13.2, TensorRT 10.16) - confirmed on the board. Dev box and Jetson are now
+on the same distro, CUDA and TensorRT generation; Isaac ROS 4.x is no longer blocked by the
+OS underneath it. Phase 4 adoption itself (actually bringing in cuVSLAM/nvblox/cuMotion) is
+still not started - this resolved the platform question, not the adoption decision.
 
 ## Why
 
@@ -51,18 +57,18 @@ phase 4 actually starts, not now. Two paths kept open:
 
 ## Consequences
 
-- Dev box (Ubuntu 24.04, Jazzy already installed) and the Orin NX running plain Jazzy in
-  Docker are aligned for phase 1 and 2 work. Isaac ROS itself is not part of either yet.
-- Upstream XLeRobot's jetson-containers package targets JetPack 6 / L4T r36.4+, which
-  matches the Orin NX as it sits today. If lerobot (phase 5) and Isaac ROS (phase 4) both
-  need to run on the same board, that's still a real integration question, made harder if
-  the reflash path is taken, since lerobot's container lineage hasn't moved to JetPack 7 as
-  of this writing either.
-- If path 2 is taken instead of reflashing, budget time for the Humble/Jazzy bridge, it's
-  not free, and re-check whether `sts_hardware_interface` itself needs to run twice (once
-  per distro) or can sit under just the Jazzy side.
+- Dev box (Ubuntu 24.04, Jazzy) and the Orin NX (now also Ubuntu 24.04, Jazzy, JetPack 7.2)
+  are fully aligned, not just for phase 1/2 - Isaac ROS 4.x itself can now run on the Jetson
+  too, whenever phase 4 actually starts.
+- **New gap opened by the reflash, inverted from the one this ADR resolved:** upstream
+  XLeRobot's own `jetson-containers` package targets JetPack 6 / L4T r36.4+, which no longer
+  matches this board. If phase 5 (lerobot) needs that container lineage, check whether it
+  runs on JetPack 7.2 before assuming it does - this wasn't a problem before the reflash.
+- Path 2 (Isaac ROS 3.2 on Humble, bridged to the Jazzy graph) was not taken - kept here for
+  the record, not a live option on this board anymore.
 
 ## Revisit if
 
-Phase 4 starts. Check current JetPack 7.x Orin NX maturity and current Isaac ROS Humble
-support status at that point, both are dated facts likely to have moved on.
+Phase 4 starts - confirm Isaac ROS 4.x (cuVSLAM/nvblox/cuMotion) actually installs and runs
+on this board as reflashed, first real test of it. Also check the `jetson-containers`/JetPack
+7.2 gap above before phase 5 needs it.

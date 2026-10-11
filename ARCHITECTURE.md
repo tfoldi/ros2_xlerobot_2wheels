@@ -188,17 +188,13 @@ Isaac ROS 4.0 dropped Humble and moved to Jazzy, current release is 4.6.0 (Aug 2
 the point of the Jetson is cuVSLAM / nvblox / cuMotion, NVIDIA picks the distro, not us.
 Jazzy on Ubuntu 24.04, both on the dev box and everything non-GPU on the Jetson.
 
-The actual Orin NX is on JetPack 6.2 (L4T 36.4.3, CUDA 12.6). Current Isaac ROS needs
-JetPack 7.2, which only just added Orin NX support in June 2026, Thor only before that. So
-on this board today: the GPU-accelerated Isaac packages that work on 6.2 are Isaac ROS 3.2,
-which is Humble.
-
-That doesn't block phase 1 or 2. Jetson containers bind-mount the host's CUDA/TensorRT
-libraries at runtime, so JetPack version only matters for what actually touches the GPU.
-Plain Jazzy, `ros2_control`, `sts_hardware_interface`, Nav2, `slam_toolbox`, none of that
-needs CUDA, all of it runs on JetPack 6.2 as is. The gap only lands at phase 4, and by then
-either reflash to JetPack 7.2 or run Isaac ROS 3.2 on Humble in a separate container bridged
-over topics. Full reasoning and the two paths in
+The Orin NX was on JetPack 6.2 (L4T 36.4.3, Ubuntu 22.04 base, CUDA 12.6) when this gap was
+first written up - current Isaac ROS needed JetPack 7.2, which had only just added Orin NX
+support in June 2026. **Resolved by reflashing to JetPack 7.2** (L4T 39.2.0, Ubuntu 24.04
+base, CUDA 13.2, TensorRT 10.16) - the board now matches the dev box's distro and CUDA
+generation, so Isaac ROS 4.x packages are no longer blocked on the OS underneath them.
+Phase 4 (cuVSLAM/nvblox/cuMotion adoption itself) is still a separate, not-yet-started
+decision - this only removed the platform-level blocker. Full reasoning in
 [ADR-0002](docs/decisions/0002-jazzy-and-isaac-ros.md).
 
 ---
@@ -405,6 +401,15 @@ The Gemini 2 is confirmed working and is the robot's head camera now - cuVSLAM a
 are unblocked (no longer gated on "once there is a camera for it"), still separate, not yet
 started, adoption decisions. [ADR-0003](docs/decisions/0003-perception-sensor.md).
 
+**Real obstacle avoidance for MoveIt 2 is also unblocked, and also not started.**
+`xlerobot_moveit_config` has no `sensors_3d.yaml` and no occupancy map monitor - the arms
+plan against self-collision geometry only, blind to anything actually in front of them.
+This doesn't need Isaac/nvblox at all: stock MoveIt 2's own `PointCloudOctomapUpdater`
+(off `depth/points`) or `DepthImageOctomapUpdater` (off `depth/image_raw`) can feed
+`move_group`'s planning scene directly from the Gemini 2 today. Octomap resolution and
+update rate need picking with the Jetson's CPU budget in mind, same spirit as the ~8Hz
+throttle on the depth stream into `tools/rerun_bridge.py`.
+
 ---
 
 ## 6. Calibration
@@ -445,10 +450,10 @@ safe to run again after applying a suggestion, to converge over a couple of iter
 | R3 | Bus 2 contention, arms starve wheel updates | Odometry jitter while manipulating | Instrument from day one. Split controller managers by rate. |
 | R4 | ~~`wheel_radius` really is 0.0635 not 0.05~~ Measured (0.0625) and spot-checked at 1 m (§1.4) | Only the full 5 m+ calibration run from §6 is still outstanding | Run the §6 procedure before trusting odometry past a few meters. |
 | R5 | ~~Gemini unusable for cuVSLAM (§5)~~ Resolved 2026-10-05: it's a Gemini 2 (misidentified before), confirmed working, color/depth/IR/IMU all live | cuVSLAM/nvblox adoption itself is still a separate, not-yet-started decision | n/a - lidar + slam_toolbox remains the navigation baseline either way, Isaac is an upgrade, not a dependency. |
-| R6 | Servo thermal limits under long navigation | Shutdown mid mission, maybe damage | Safety supervisor in phase 1, not later (§4.4). |
+| R6 | Servo thermal/stall limits under long navigation | Shutdown mid mission, maybe damage | `safety_supervisor.py` already subscribes to `/dynamic_joint_states` and defines `TEMPERATURE_LIMIT_C`/`STALL_CURRENT_THRESHOLD`, but `on_dynamic_joint_states` doesn't check them yet - the threshold logic itself is an unwritten `# TODO`, not just untuned. Still open. |
 | R7 | Top heavy cart tips under hard acceleration | Broken hardware | Conservative accel limits in `diff_drive_controller` and the velocity smoother from the start. |
 | R8 | Upstream says 0.4.0 is the last Feetech / SO101 chassis version | Platform moves to brushless | Keep the hardware behind `ros2_control`, then a brushless base swaps one plugin instead of the stack. The ODrive variant already exists upstream. |
-| R9 | Orin NX is on JetPack 6.2, current Isaac ROS needs 7.2 (§2.3) | No Jazzy cuVSLAM/nvblox without a reflash | Doesn't block phase 1/2, plain Jazzy runs on 6.2 fine. Decide reflash vs Humble side-container at phase 4, see ADR-0002. |
+| R9 | ~~Orin NX is on JetPack 6.2, current Isaac ROS needs 7.2 (§2.3)~~ Resolved: reflashed to JetPack 7.2 (L4T 39.2.0), confirmed on the actual board | cuVSLAM/nvblox/cuMotion adoption itself is still a separate, not-yet-started decision | n/a - phase 4 can start whenever it's prioritized, no OS-level blocker left, see ADR-0002. |
 | R10 | `diff_drive_controller` can stop driving the wheels while `controller_manager` still reports every controller `active` and logs no error anywhere. Confirmed not a hardware/power/protocol fault: writing the servo bus directly (same registers, same broadcast sync-write `sts_hardware_interface` itself uses) moves the wheels correctly while the ROS side stays silently stuck | Base ignores drive commands with nothing visibly wrong in `ros2 control list_controllers`, `/diagnostics`, or the hardware interface's own logs | A full bringup restart (fresh `controller_manager` process) clears it. Root cause not isolated yet; suspect bus 2 contention or a stuck internal state in a long-running process, see R3. If it recurs, instrument `write()`'s actual per-cycle `hw_cmd_velocity_` for the wheel joints rather than re-checking hardware. |
 
 ---

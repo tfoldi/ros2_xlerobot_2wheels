@@ -4,19 +4,47 @@ ROS 2 Jazzy stack for [XLeRobot](https://github.com/Vector-Wangel/XLeRobot) **0.
 servo two-wheel differential drive version. Built for the NVIDIA Isaac stack on Jetson,
 but runs on any PC with a decent NVIDIA GPU.
 
-> **Status: running on hardware.** Base drives, SLAM/AMCL localize on a saved map, and Nav2
-> navigates it, all on the real robot. Both SO-101 arms and the head have a real URDF,
-> calibration workflow, `ros2_control` (torqued and commandable by default, pass
-> `torque_off:=true` for a states-only bringup) and a MoveIt 2 config, checked against mock
-> hardware, a fake servo bus running the real driver, the Isaac Sim twin, and live hardware -
-> both arms and the head move and plan through MoveIt 2 on the real robot. See
-> [ARCHITECTURE.md](ARCHITECTURE.md) and [§ Phases](ARCHITECTURE.md#8-phases) for what's next,
-> [docs/arms-bringup.md](docs/arms-bringup.md) for the arm procedure.
+This repo reuses the XLeRobot hardware platform - CAD, motor conventions, kinematics - under
+`ros2_control` instead of the LeRobot-integrated Python control path, so Nav2, MoveIt 2 and
+Isaac ROS run on it natively. Upstream stays the hardware project and the imitation-learning
+path; the two don't depend on each other.
 
-This repository is not built on top of XLeRobot, nor is it a fork of it. It reuses the same
-platform - CAD, motor conventions and kinematics - but replaces the LeRobot-integrated Python
-control path with `ros2_control` so Nav2, MoveIt 2 and Isaac ROS work natively. Upstream stays
-the hardware project and the imitation learning path.
+---
+
+## Status
+
+Running on real hardware:
+
+- [x] Base drive, odometry, SLAM/AMCL on a saved map, Nav2 point-to-point navigation
+- [x] Both SO-101 arms and the head - URDF, calibration, `ros2_control` (torqued and
+  commandable by default, `torque_off:=true` for states-only), MoveIt 2 planning and
+  execution, checked against mock hardware, a fake servo bus, the Isaac Sim twin, and the
+  real robot
+- [x] Head camera: a plain USB webcam (`sensor:=usbcam`) is the common case, or an Orbbec
+  Gemini 2 for color/depth/point cloud/IMU (`sensor:=gemini`) if you have one - this
+  particular robot has the Gemini permanently mounted, so it's what the launch files
+  default to, see [ADR-0003](docs/decisions/0003-perception-sensor.md)
+- [x] Dual-stick arm teleop, joystick base teleop, safety supervisor watching servo
+  temperature/current
+- [x] Hand-guided trajectory record/replay, including synchronized multi-arm trajectories
+- [x] MCP server for agent control - saved positions/waypoints, spatial memory, camera
+  capture with pose context
+- [x] Rerun bridge - robot model, odometry, camera video and depth, MCP call log
+
+Not yet:
+
+- [ ] Tag-based AMCL re-localization (ArUco home marker) - built, not tested end to end on
+  hardware
+- [ ] CI/CD - no automated build or test on this repo
+- [ ] Real obstacle avoidance for MoveIt 2 - plans against self-collision only, nothing yet
+  feeds the depth camera into an octomap
+- [ ] cuVSLAM / nvblox adoption - unblocked by the Gemini 2 and the JetPack 7.2 reflash, not started
+- [ ] [Open issues](https://github.com/tfoldi/ros2_xlerobot_2wheels/issues) - the servo
+  torque-disable race on shutdown (#4) is the one to know about before leaving a bringup
+  unattended
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) and [§ Phases](ARCHITECTURE.md#8-phases) for the
+full picture, [docs/arms-bringup.md](docs/arms-bringup.md) for the arm procedure.
 
 ---
 
@@ -25,10 +53,10 @@ the hardware project and the imitation learning path.
 A standard ROS 2 autonomy stack on the XLeRobot two-wheel base:
 
 - `ros2_control` hardware interface for both Feetech buses, 16 joints
-- `diff_drive_controller` for odometry and TF, SLAM and Nav2 - working on the real robot
-- Both SO-101 arms and the head: calibration, model, controllers, MoveIt 2 (phase 3)
-- Isaac ROS cuVSLAM / nvblox / cuMotion where they earn their place (phase 4)
-- MCP for agent-based orchestration (phase 5 or something)
+- `diff_drive_controller`, SLAM and Nav2 for the base
+- Both SO-101 arms and the head: calibration, model, controllers, MoveIt 2
+- Isaac ROS cuVSLAM / nvblox / cuMotion where they earn their place
+- MCP server for agent-based orchestration
 
 ## Target hardware
 
@@ -39,9 +67,13 @@ A standard ROS 2 autonomy stack on the XLeRobot two-wheel base:
 | Compute, deploy | Jetson Orin NX, JetPack 7.2 |
 | Compute, dev | x86-64 + NVIDIA GPU, Ubuntu 24.04 |
 | ROS | Jazzy Jalisco |
-| Sensors | LDROBOT LD19 lidar for mapping. Perception undecided, see [ARCHITECTURE §5](ARCHITECTURE.md#5-perception-still-open) |
+| Sensors | LDROBOT LD19 lidar for mapping, plain USB webcam for the head camera - an Orbbec Gemini 2 is a drop-in optional upgrade for depth/point cloud/IMU, see [ADR-0003](docs/decisions/0003-perception-sensor.md) |
 
 Only Jazzy is supported, since Isaac ROS 4.0 only supports that.
+
+This particular robot has a Gemini 2 permanently mounted, so its own launch files default
+`sensor:=gemini` - pass `sensor:=usbcam` explicitly if yours doesn't have one (most builds
+won't).
 
 ---
 
@@ -87,18 +119,22 @@ ros2 launch xlerobot_description display.launch.py
 ```
 
 Bring up the base on real hardware (wheels only, arms and head off, nothing draws torque
-outside the wheels):
+outside the wheels). `sensor:=usbcam` is the plain-webcam path most builds want; drop it
+if your launch files already default to something else:
 
 ```bash
-ros2 launch xlerobot_bringup bringup.launch.py cameras:=true lidar:=true
+ros2 launch xlerobot_bringup bringup.launch.py cameras:=true lidar:=true sensor:=usbcam
 ```
 
 Add the arms and head (state-only, torque off, safe to bring up and move by hand - see
 [docs/arms-bringup.md](docs/arms-bringup.md) before ever setting `torque_off:=false`):
 
 ```bash
-ros2 launch xlerobot_bringup bringup.launch.py with_arms:=true with_head:=true
+ros2 launch xlerobot_bringup bringup.launch.py with_arms:=true with_head:=true sensor:=usbcam
 ```
+
+Have an Orbbec Gemini 2 instead of a plain webcam? Swap in `sensor:=gemini` for color,
+depth, point cloud and IMU - see [ADR-0003](docs/decisions/0003-perception-sensor.md).
 
 Same stack against mock hardware or the Isaac Sim twin, no robot needed:
 
@@ -112,8 +148,8 @@ ros2 launch xlerobot_moveit_config move_group.launch.py rviz:=true              
 
 ## Before you plug anything in
 
-Three things bit during bring-up. Writing them down so building this on another robot
-doesn't rediscover them the hard way:
+Three things bit during bring-up on this robot, worth checking before you trust anything
+downstream:
 
 **1. Upstream's wheel radius is wrong, measure yours.**
 `config_xlerobot_2wheels.py` has `wheel_radius = 0.05`; the 0.4.0 build notes say 5 inch
@@ -183,7 +219,7 @@ first).
 | Meshes and CAD | From the Isaac Sim URDF bundle and STEP files |
 | Motor IDs, bus split, mirrored wheel sign | Read from `xlerobot_2wheels.py`, restated in [ARCHITECTURE §1](ARCHITECTURE.md#1-hardware) |
 | Nominal dimensions | Starting point only, treated as calibration targets |
-| Head camera frame names | Kept as is |
+| Head camera mount point | Kept, plain USB webcam by default - swappable for an Orbbec Gemini 2, see [ADR-0003](docs/decisions/0003-perception-sensor.md) |
 
 Not taken: the ZMQ host/client control path, the `lerobot` runtime dependency, the virtual
 planar joint URDF.
