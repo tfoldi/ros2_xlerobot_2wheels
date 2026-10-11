@@ -5,7 +5,7 @@ left/right (arm wrist cameras) are always plain USB webcams: one usb_cam node pe
 device exists, in the namespace cameras/<name>. image_transport's ffmpeg plugin encodes on
 <name>/image_raw/ffmpeg while something subscribes to it.
 
-head depends on the sensor:=usbcam|gemini arg (default gemini, matches xlerobot.urdf.xacro's own
+head depends on the sensor:=usbcam|gemini arg (default usbcam, matches xlerobot.urdf.xacro's own
 default - see ADR-0003):
   - usbcam: same plain usb_cam node as left/right, from cameras.yaml's head entry.
   - gemini: the usb_cam entry for head is skipped entirely. Instead, the official
@@ -118,6 +118,6 @@ def generate_launch_description():
         get_package_share_directory("xlerobot_bringup"), "config", "cameras.yaml")
     return LaunchDescription([
         DeclareLaunchArgument("config", default_value=default_config),
-        DeclareLaunchArgument("sensor", default_value="gemini"),
+        DeclareLaunchArgument("sensor", default_value="usbcam"),
         OpaqueFunction(function=_camera_nodes),
     ])

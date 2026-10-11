@@ -387,8 +387,9 @@ not settled.
   misidentified here as the original (non-2) Gemini - corrected 2026-10-05, confirmed from
   the device's own firmware response, not inferred. Fully supported by the official
   `ros-jazzy-orbbec-camera` apt package, `gemini2.launch.py`, no patching needed. Live-tested:
-  color/depth/IR/point cloud/IMU all streaming real data. Now the robot's actual head camera,
-  see [ADR-0003](docs/decisions/0003-perception-sensor.md).
+  color/depth/IR/point cloud/IMU all streaming real data. `sensor:=gemini` is a supported,
+  tested option, not the stack's own default (`sensor:=usbcam`, a plain webcam, is - see
+  [ADR-0003](docs/decisions/0003-perception-sensor.md)).
 - **Velodyne VLP-16.** Definitely works. `velodyne` → `pointcloud_to_laserscan` →
   `slam_toolbox` → Nav2 is the most predictable path and needs no NVIDIA stack. Costs
   ~830 g and ~8 W on a battery powered servo cart, plus bulk, plus no cuVSLAM.
@@ -397,9 +398,9 @@ not settled.
   these two (`Gimbal_Pitch_Holder_d435.stl`, `Gimbal_Pitch_Holder_d455.stl`), with a
   commented out `RealSenseCameraConfig` head camera already in the lerobot config.
 
-The Gemini 2 is confirmed working and is the robot's head camera now - cuVSLAM and nvblox
-are unblocked (no longer gated on "once there is a camera for it"), still separate, not yet
-started, adoption decisions. [ADR-0003](docs/decisions/0003-perception-sensor.md).
+With the Gemini 2 confirmed working as a supported option, cuVSLAM and nvblox are unblocked
+(no longer gated on "once there is a camera for it") - still separate, not yet started,
+adoption decisions. [ADR-0003](docs/decisions/0003-perception-sensor.md).
 
 **Real obstacle avoidance for MoveIt 2 is also unblocked, and also not started.**
 `xlerobot_moveit_config` has no `sensors_3d.yaml` and no occupancy map monitor - the arms

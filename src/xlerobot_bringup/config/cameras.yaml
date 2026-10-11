@@ -20,23 +20,20 @@ defaults:
   gop_size: 30
 
 # frame_id is the camera's optical frame in the URDF (head from sensors.xacro, the
-# wrist ones from so101_arm.xacro), so the video can be placed in the robot.
+# wrist ones from so101_arm.xacro), so the video can be placed in the robot. It's also the
+# usb_cam node's own frame_id param when sensor:=usbcam.
 #
-# head's frame_id is specifically the Gemini 2's own color-stream optical frame, confirmed
-# live via its camera_info topic - not the usbcam-era "head_camera_optical_frame", and not
-# "camera_color_optical_frame" either (that assumed the driver's frame names are fixed
-# constants; they're actually "<camera_name>_..." - cameras.launch.py passes
-# camera_name:="head", so the real name is head_color_optical_frame - see ADR-0003 and
-# sensors.xacro's gemini branch). This value is read directly by the MCP server's
-# CAMERA_FRAME_IDS (tools/mcp_server/bridge.py) for every sensor mode, not just usbcam - it's
-# the TF frame capture_image/remember_object look up for the head camera's pose, so it must
-# match whatever's actually live regardless of which sensor arg is in use.
-# If sensor:=usbcam is used, this would need to change back to head's usbcam frame_id - not
-# worth a fully dynamic config for a fallback path.
+# head's value here only matches the usbcam branch (the common case, and this stack's own
+# default - see ADR-0003). A depth camera like the Gemini 2 (sensor:=gemini) names its own
+# optical frame differently (e.g. head_color_optical_frame - the driver's choice, not fixed
+# across sensor types), so this static value would be wrong for it. That's fine: the MCP
+# server (tools/mcp_server/bridge.py) reads the real frame_id live off each camera's own
+# camera_info instead of this file, for exactly this reason - this value is only its
+# last-resort fallback before the first camera_info message arrives.
 cameras:
   head:
     device: /dev/xle-cam-head
-    frame_id: head_color_optical_frame
+    frame_id: head_camera_optical_frame
   left:
     device: /dev/xle-cam-left
     frame_id: left_arm_wrist_camera_optical_frame

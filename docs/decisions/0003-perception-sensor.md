@@ -56,11 +56,10 @@ fusion wants, and upstream XLeRobot already ships head gimbal mounts for exactly
 
 ## Decision
 
-Orbbec Gemini 2, confirmed working. It physically replaced the plain USB webcam as the
-head camera (2026-10-05 - 3D-printed holder cut down to a flat mount, camera screwed
-directly to it). `xlerobot.urdf.xacro`'s `sensor` arg defaults to `gemini`; `cameras.yaml`'s
-`head` entry and `cameras.launch.py`'s `sensor:=usbcam|gemini` switch give a path back to
-the plain webcam if ever needed. See `xlerobot_bringup/launch/cameras.launch.py` and
+Orbbec Gemini 2, confirmed working as a supported head camera option. `sensor:=usbcam`
+(plain webcam) stays the stack's own default - most builds won't have a depth camera;
+`sensor:=gemini` is the opt-in swap for one, threaded through `xlerobot.urdf.xacro`,
+`cameras.yaml` and `cameras.launch.py`. See `xlerobot_bringup/launch/cameras.launch.py` and
 `xlerobot_description/urdf/sensors.xacro` for the integration (the driver publishes its own
 calibrated extrinsic TF tree rooted at a link named `<camera_name>_link`, i.e. `head_link`
 here since `camera_name:="head"` - not a fixed `camera_link` as first assumed from a

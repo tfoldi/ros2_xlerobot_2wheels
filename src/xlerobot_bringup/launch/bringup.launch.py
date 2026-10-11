@@ -186,10 +186,11 @@ def generate_launch_description():
         DeclareLaunchArgument("record", default_value="false"),
         DeclareLaunchArgument("foxglove", default_value="false"),
         DeclareLaunchArgument("cameras", default_value="false"),
-        # usbcam | gemini, see xlerobot.urdf.xacro - gemini (Orbbec Gemini 2) is the head
-        # camera the robot has today, physically replaced the usbcam 2026-10-05. Also
-        # selects which driver cameras.launch.py brings up for "head" - see its own docstring.
-        DeclareLaunchArgument("sensor", default_value="gemini"),
+        # usbcam | gemini, see xlerobot.urdf.xacro - usbcam is a plain webcam, the common
+        # case; gemini (Orbbec Gemini 2) adds depth/point cloud/IMU for builds that have
+        # one. Also selects which driver cameras.launch.py brings up for "head" - see its
+        # own docstring.
+        DeclareLaunchArgument("sensor", default_value="usbcam"),
         DeclareLaunchArgument("lidar", default_value="false"),
 
         # Must run before the Node actions below: OpaqueFunction is resolved

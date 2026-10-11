@@ -386,7 +386,13 @@ class XleRobotBridge(Node):
         output_path.parent.mkdir(parents=True, exist_ok=True)
         cv2.imwrite(str(output_path), frame)
 
-        frame_id = CAMERA_FRAME_IDS[camera]
+        # Read live, not CAMERA_FRAME_IDS's static cameras.yaml value - the real frame_id
+        # depends on which sensor:= is actually running (usbcam vs gemini vs a future
+        # realsense), and camera_info's own header already carries it. Falls back to the
+        # static value only in the unlikely case camera_info hasn't arrived yet even though
+        # a frame has.
+        camera_info = self.camera_info[camera]
+        frame_id = camera_info.header.frame_id if camera_info is not None else CAMERA_FRAME_IDS[camera]
         camera_pose_map, tf_error = self._camera_pose_in_map(frame_id)
         result = {
             "path": str(output_path),

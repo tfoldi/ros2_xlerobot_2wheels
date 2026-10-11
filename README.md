@@ -20,10 +20,9 @@ Running on real hardware:
   commandable by default, `torque_off:=true` for states-only), MoveIt 2 planning and
   execution, checked against mock hardware, a fake servo bus, the Isaac Sim twin, and the
   real robot
-- [x] Head camera: a plain USB webcam (`sensor:=usbcam`) is the common case, or an Orbbec
-  Gemini 2 for color/depth/point cloud/IMU (`sensor:=gemini`) if you have one - this
-  particular robot has the Gemini permanently mounted, so it's what the launch files
-  default to, see [ADR-0003](docs/decisions/0003-perception-sensor.md)
+- [x] Head camera: `sensor:=usbcam` for a plain webcam (the default), `sensor:=gemini` for
+  an Orbbec Gemini 2's color/depth/point cloud/IMU, see
+  [ADR-0003](docs/decisions/0003-perception-sensor.md)
 - [x] Dual-stick arm teleop, joystick base teleop, safety supervisor watching servo
   temperature/current
 - [x] Hand-guided trajectory record/replay, including synchronized multi-arm trajectories
@@ -64,16 +63,11 @@ A standard ROS 2 autonomy stack on the XLeRobot two-wheel base:
 |---|---|
 | Robot | XLeRobot 0.4.0, two-wheel servo base, IKEA RÅSKOG chassis |
 | Actuators | 16x Feetech STS3215 on 2 half-duplex TTL buses |
-| Compute, deploy | Jetson Orin NX, JetPack 7.2 |
-| Compute, dev | x86-64 + NVIDIA GPU, Ubuntu 24.04 |
+| Compute | Jetson Orin NX (JetPack 7.2) on the robot. Any x86-64 machine with an NVIDIA GPU works too, for building, Isaac Sim, or running the stack without a robot attached. |
 | ROS | Jazzy Jalisco |
-| Sensors | LDROBOT LD19 lidar for mapping, plain USB webcam for the head camera - an Orbbec Gemini 2 is a drop-in optional upgrade for depth/point cloud/IMU, see [ADR-0003](docs/decisions/0003-perception-sensor.md) |
+| Sensors | LDROBOT LD19 lidar for mapping, plain USB webcam for the head camera (default) - an Orbbec Gemini 2 is a drop-in optional upgrade for depth/point cloud/IMU, see [ADR-0003](docs/decisions/0003-perception-sensor.md) |
 
 Only Jazzy is supported, since Isaac ROS 4.0 only supports that.
-
-This particular robot has a Gemini 2 permanently mounted, so its own launch files default
-`sensor:=gemini` - pass `sensor:=usbcam` explicitly if yours doesn't have one (most builds
-won't).
 
 ---
 
@@ -119,22 +113,21 @@ ros2 launch xlerobot_description display.launch.py
 ```
 
 Bring up the base on real hardware (wheels only, arms and head off, nothing draws torque
-outside the wheels). `sensor:=usbcam` is the plain-webcam path most builds want; drop it
-if your launch files already default to something else:
+outside the wheels):
 
 ```bash
-ros2 launch xlerobot_bringup bringup.launch.py cameras:=true lidar:=true sensor:=usbcam
+ros2 launch xlerobot_bringup bringup.launch.py cameras:=true lidar:=true
 ```
 
 Add the arms and head (state-only, torque off, safe to bring up and move by hand - see
 [docs/arms-bringup.md](docs/arms-bringup.md) before ever setting `torque_off:=false`):
 
 ```bash
-ros2 launch xlerobot_bringup bringup.launch.py with_arms:=true with_head:=true sensor:=usbcam
+ros2 launch xlerobot_bringup bringup.launch.py with_arms:=true with_head:=true
 ```
 
-Have an Orbbec Gemini 2 instead of a plain webcam? Swap in `sensor:=gemini` for color,
-depth, point cloud and IMU - see [ADR-0003](docs/decisions/0003-perception-sensor.md).
+Add `sensor:=gemini` to either command for an Orbbec Gemini 2's color/depth/point cloud/IMU
+instead of the default plain webcam - see [ADR-0003](docs/decisions/0003-perception-sensor.md).
 
 Same stack against mock hardware or the Isaac Sim twin, no robot needed:
 
