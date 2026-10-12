@@ -10,21 +10,18 @@
 
   Two instances of this plugin under one controller_manager work: both
   buses load, configure, and activate cleanly (adityakamath/sts_hardware_interface).
-  One gotcha: each instance opens its own internal node hardcoded to the
-  name "sts_hardware_interface_node" (src/sts_hardware_interface.cpp:622),
-  and both advertise /emergency_stop on that same absolute name. Two
-  servers, one service name, so calling /emergency_stop only reaches one
-  bus, not both. Don't build the safety supervisor around that service,
-  see ARCHITECTURE.md section 4.4.
+  Without instance_id, every instance opens an internal node with the same
+  name and advertises /emergency_stop on the same absolute name, so a call
+  only reaches one bus. Each bus below sets instance_id to its component
+  name, giving /emergency_stop_xlerobot_bus1 and _bus2 (what
+  tools/estop.py calls). Each still stops only its own bus, so don't build
+  the safety supervisor around these, see ARCHITECTURE.md section 4.4.
 
-  Multi-turn wheel position does not unwrap. The driver reads the raw
-  encoder register every cycle and maps it straight to radians
-  (sts_conversions.hpp: raw_position_to_radians), no revolution counter,
-  same code path for every operating_mode. A continuously spinning wheel
-  wraps every physical turn (~0.4m here), diff_drive_controller differences
-  that position, so odometry breaks on the first wrap. Needs either an
-  upstream patch or a local unwrapping layer before this can feed
-  diff_drive_controller, see ARCHITECTURE.md section 4.1.
+  Wheel position needs the fork's multi-turn unwrap for MODE_VELOCITY joints:
+  upstream maps the raw encoder register straight to radians, so a spinning
+  wheel wraps every turn and diff_drive_controller odometry breaks on the
+  first wrap. xlerobot.repos pulls the fork for that, see ARCHITECTURE.md
+  section 4.1.
 
   Plugin uses its OWN mock mode (enable_mock_mode) rather than
   mock_components/GenericSystem, so use_mock_hardware:=true still exercises
@@ -101,6 +98,7 @@
         <hardware>
           <plugin>sts_hardware_interface/STSHardwareInterface</plugin>
           <param name="serial_port">${bus1_port}</param>
+          <param name="instance_id">xlerobot_bus1</param>
           <param name="baud_rate">1000000</param>
           <param name="enable_mock_mode">$(arg use_mock_hardware)</param>
           <param name="proportional_vel_max">${dims['arms']['servo_speed_limit_steps']}</param>
@@ -130,6 +128,7 @@
       <hardware>
         <plugin>sts_hardware_interface/STSHardwareInterface</plugin>
         <param name="serial_port">${bus2_port}</param>
+        <param name="instance_id">xlerobot_bus2</param>
         <param name="baud_rate">1000000</param>
         <param name="enable_mock_mode">$(arg use_mock_hardware)</param>
         <param name="proportional_vel_max">${dims['arms']['servo_speed_limit_steps']}</param>

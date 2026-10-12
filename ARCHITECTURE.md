@@ -363,10 +363,11 @@ should:
 Upstream `main` opens one internal node per bus instance with the hardcoded name
 `sts_hardware_interface_node`, and each advertises `/emergency_stop` on that same absolute
 name. Two servers under one service name means a call only reaches one of them, not both, so
-it looks like a global e-stop and isn't one. The fork suffixes node and service names with
-the component's `<ros2_control name>` (upstream PR #22, not yet tested with two buses on
-hardware), but each instance's e-stop still only stops its own bus, so it is still not a
-global e-stop. With two buses that's a stop-half-the-robot bug, not a cosmetic one.
+it looks like a global e-stop and isn't one. The fork adds an opt-in `instance_id` hardware
+parameter that suffixes node and service names (upstream PR #22, not yet tested with two
+buses on hardware); `xlerobot.ros2_control.xacro` sets it to each component's name, giving
+`/emergency_stop_xlerobot_bus1` and `_bus2`. Each instance's e-stop still only stops its own
+bus, so it is still not a global e-stop. With two buses that's a stop-half-the-robot bug, not a cosmetic one.
 
 Use `controller_manager`'s own `switch_controller` to deactivate everything instead, or just
 rely on `cmd_vel_timeout` plus zero-command on watchdog trip, both of which act uniformly
