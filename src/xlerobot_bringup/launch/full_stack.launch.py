@@ -8,6 +8,9 @@ bringup.launch.py itself already folds in teleop/cameras/lidar.
   ros2 launch xlerobot_bringup full_stack.launch.py with_arms:=true with_head:=true \
       cameras:=true lidar:=true slam:=true
 
+Add sensor:=gemini for an Orbbec Gemini 2 head camera, arm_teleop:=true for the dual-stick arm
+teleop (needs with_arms:=true and torque_off:=false, the default).
+
 move_group and navigation start a few seconds after bringup, not simultaneously with it - lidar
 and the controllers need a moment to come up first. Starting navigation before the lidar is
 actually publishing scans is a real failure mode, not a hypothetical one: Nav2's own lifecycle
@@ -26,6 +29,7 @@ launch files separately with no extra arguments.
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 import os
@@ -39,6 +43,8 @@ def generate_launch_description():
     bringup_launch_file = os.path.join(bringup_share, "launch", "bringup.launch.py")
     move_group_launch_file = os.path.join(moveit_share, "launch", "move_group.launch.py")
     navigation_launch_file = os.path.join(nav_share, "launch", "navigation.launch.py")
+    arm_teleop_launch_file = os.path.join(
+        get_package_share_directory("xlerobot_teleop"), "launch", "arm_servo_teleop.launch.py")
 
     # Same names/defaults as the underlying launch files, so this is a drop-in replacement for
     # running them separately - nothing new to learn, just fewer terminals.
@@ -53,6 +59,7 @@ def generate_launch_description():
         "with_arms": LaunchConfiguration("with_arms"),
         "torque_off": LaunchConfiguration("torque_off"),
         "cameras": LaunchConfiguration("cameras"),
+        "sensor": LaunchConfiguration("sensor"),
         "lidar": LaunchConfiguration("lidar"),
         "record": LaunchConfiguration("record"),
         "foxglove": LaunchConfiguration("foxglove"),
@@ -78,6 +85,8 @@ def generate_launch_description():
         DeclareLaunchArgument("with_arms", default_value="false"),
         DeclareLaunchArgument("torque_off", default_value="false"),
         DeclareLaunchArgument("cameras", default_value="false"),
+        DeclareLaunchArgument("sensor", default_value="usbcam"),
+        DeclareLaunchArgument("arm_teleop", default_value="false"),
         DeclareLaunchArgument("lidar", default_value="false"),
         DeclareLaunchArgument("record", default_value="false"),
         DeclareLaunchArgument("foxglove", default_value="false"),
@@ -105,6 +114,10 @@ def generate_launch_description():
                 IncludeLaunchDescription(
                     PythonLaunchDescriptionSource(navigation_launch_file),
                     launch_arguments=navigation_args.items(),
+                ),
+                IncludeLaunchDescription(
+                    PythonLaunchDescriptionSource(arm_teleop_launch_file),
+                    condition=IfCondition(LaunchConfiguration("arm_teleop")),
                 ),
             ],
         ),
