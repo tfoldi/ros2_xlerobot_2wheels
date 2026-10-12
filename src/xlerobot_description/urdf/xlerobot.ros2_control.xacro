@@ -23,6 +23,10 @@
   first wrap. xlerobot.repos pulls the fork for that, see ARCHITECTURE.md
   section 4.1.
 
+  hold_position_on_activate must stay true: upstream defaults it to false, and then the
+  position command sits at its initial 0.0 and torque-on drives every arm joint to the model's
+  zero pose before any controller has written a command.
+
   Plugin uses its OWN mock mode (enable_mock_mode) rather than
   mock_components/GenericSystem, so use_mock_hardware:=true still exercises
   the real per-joint param parsing and mode assignment.
@@ -99,6 +103,7 @@
           <plugin>sts_hardware_interface/STSHardwareInterface</plugin>
           <param name="serial_port">${bus1_port}</param>
           <param name="instance_id">xlerobot_bus1</param>
+          <param name="hold_position_on_activate">true</param>
           <param name="baud_rate">1000000</param>
           <param name="enable_mock_mode">$(arg use_mock_hardware)</param>
           <param name="proportional_vel_max">${dims['arms']['servo_speed_limit_steps']}</param>
@@ -129,6 +134,7 @@
         <plugin>sts_hardware_interface/STSHardwareInterface</plugin>
         <param name="serial_port">${bus2_port}</param>
         <param name="instance_id">xlerobot_bus2</param>
+        <param name="hold_position_on_activate">true</param>
         <param name="baud_rate">1000000</param>
         <param name="enable_mock_mode">$(arg use_mock_hardware)</param>
         <param name="proportional_vel_max">${dims['arms']['servo_speed_limit_steps']}</param>
