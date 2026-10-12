@@ -66,10 +66,13 @@ class ArmServoTeleop(Node):
         self.jj_axis_y_joint = p("joint_jog_axis_y_joint").value
         self.deadzone = p("deadzone").value
 
-        self.synced = {arm: False for arm in ARMS}  # per-arm: has this node told the real Servo
-        # instance to use JOINT_JOG yet - servo.launch.py's own startup timer defaults every
-        # Servo instance to TWIST regardless of what this node wants, so without this each arm
-        # stays in TWIST until told otherwise.
+        # Both Servo services are reconciled in tick() until Servo acknowledges them: the
+        # services are discoverable before Servo has finished initialising, so a one-shot call
+        # at startup can be lost and leave the arm refusing every jog command.
+        self.synced = {arm: False for arm in ARMS}  # Servo acknowledged JOINT_JOG
+        self.want_paused = {arm: True for arm in ARMS}
+        self.acked_paused = {arm: None for arm in ARMS}
+        self.in_flight = set()
         self.enabled_prev = False
         self.gripper_prev = False
         self.gripper_state = {"left": GRIPPER_CLOSED, "right": GRIPPER_CLOSED}
@@ -92,22 +95,42 @@ class ArmServoTeleop(Node):
         self.create_subscription(Joy, "/joy", self.on_joy, 10)
         self.create_timer(1.0 / p("publish_rate_hz").value, self.tick)
 
-        for arm in ARMS:
-            self.set_pause(arm, True)
         self.get_logger().info(
             f"arm_servo_teleop up - hold button {self.enable_button} to jog both arms "
             f"(left stick -> left arm, right stick -> right arm), JOINT_JOG mode")
 
-    def set_pause(self, arm, paused):
-        if self.pause_clients[arm].service_is_ready():
-            self.pause_clients[arm].call_async(SetBool.Request(data=paused))
+    def call_until_acked(self, key, client, request, on_success):
+        if key in self.in_flight or not client.service_is_ready():
+            return
+        self.in_flight.add(key)
 
-    def set_command_type(self, arm, command_type):
-        if self.command_type_clients[arm].service_is_ready():
-            future = self.command_type_clients[arm].call_async(ServoCommandType.Request(command_type=command_type))
-            future.add_done_callback(
-                lambda f, arm=arm, ct=command_type: self.get_logger().info(
-                    f"set_command_type({arm}, {ct}) -> {f.result()}"))
+        def done(future):
+            self.in_flight.discard(key)
+            result = future.result()
+            if result is not None and result.success:
+                on_success()
+            else:
+                self.get_logger().warning(f"{key} not accepted by Servo yet, retrying",
+                                          throttle_duration_sec=2.0)
+
+        client.call_async(request).add_done_callback(done)
+
+    def reconcile(self):
+        for arm in ARMS:
+            if not self.synced[arm]:
+                self.call_until_acked(
+                    (arm, "command_type"), self.command_type_clients[arm],
+                    ServoCommandType.Request(command_type=JOINT_JOG),
+                    lambda arm=arm: self.mark_synced(arm))
+            if self.acked_paused[arm] != self.want_paused[arm]:
+                paused = self.want_paused[arm]
+                self.call_until_acked(
+                    (arm, "pause"), self.pause_clients[arm], SetBool.Request(data=paused),
+                    lambda arm=arm, paused=paused: self.acked_paused.__setitem__(arm, paused))
+
+    def mark_synced(self, arm):
+        self.synced[arm] = True
+        self.get_logger().info(f"Servo {arm}: JOINT_JOG set")
 
     def send_gripper(self, arm, position):
         client = self.gripper_clients[arm]
@@ -136,10 +159,7 @@ class ArmServoTeleop(Node):
         return bool(self.joy.buttons[index])
 
     def tick(self):
-        for arm in ARMS:
-            if not self.synced[arm] and self.command_type_clients[arm].service_is_ready():
-                self.set_command_type(arm, JOINT_JOG)
-                self.synced[arm] = True
+        self.reconcile()
 
         if self.joy is None:
             return
@@ -156,7 +176,7 @@ class ArmServoTeleop(Node):
 
         if enabled and not self.enabled_prev:
             for arm in ARMS:
-                self.set_pause(arm, False)
+                self.want_paused[arm] = False
         elif not enabled and self.enabled_prev:
             for arm in ARMS:
                 self.stop_and_pause(arm)
@@ -185,7 +205,7 @@ class ArmServoTeleop(Node):
         zero_jog = JointJog()
         zero_jog.header.stamp = self.get_clock().now().to_msg()
         self.jog_pubs[arm].publish(zero_jog)
-        self.set_pause(arm, True)
+        self.want_paused[arm] = True
 
 
 def main():
@@ -196,10 +216,9 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        for arm in ARMS:
-            node.stop_and_pause(arm)
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":
