@@ -84,6 +84,7 @@ src/xlerobot_navigation/    slam_toolbox, Nav2, robot_localization params
 src/xlerobot_perception/    sensor agnostic camera and lidar bringup
 sim/                        Isaac Sim twin: scene builder, headless/GUI launch
 tools/                      calibration, bus diagnostics, e-stop, fake servo bus for dev
+docs/tools.md               what every tool in tools/ does
 docs/arms-bringup.md        the arm bring-up procedure, step by step
 docs/sim-twin.md            the Isaac Sim twin, setup and known limitations
 docs/decisions/             architecture decision records
@@ -198,10 +199,10 @@ udev rule generation ported from
 [RoboCrew](https://github.com/Grigorij-Dudnik/RoboCrew)'s
 `robocrew_setup_usb_modules` (MIT licensed).
 
-`tools/check_feetech_bus.py` is a placeholder, not wired up. To check which cable is which or
-whether a servo answers, `tools/calibrate_arm.py status --arm left|right|head` reads every
-joint's position, temperature and voltage on that bus (read-only, stack must be stopped
-first).
+To check which cable is which or whether a servo answers, `tools/calibrate_arm.py status
+--arm left|right|head` reads every joint's position, temperature and voltage on that bus
+(read-only, stack must be stopped first). See [docs/tools.md](docs/tools.md) for every tool
+in `tools/`.
 
 ---
 
