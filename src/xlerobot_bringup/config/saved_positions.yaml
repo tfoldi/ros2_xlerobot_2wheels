@@ -17,3 +17,8 @@ positions:
     joints:
       head_pan_joint: 0.0
       head_tilt_joint: 0.0
+  head_look_down:
+    group: head
+    joints:
+      head_pan_joint: 0.0
+      head_tilt_joint: -0.6

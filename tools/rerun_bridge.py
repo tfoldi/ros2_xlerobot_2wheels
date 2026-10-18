@@ -170,6 +170,23 @@ def blueprint(cameras):
     if cameras:
         tabs.append(rrb.Horizontal(*camera_views(cameras), name="Cameras"))
 
+    if "head" in cameras:
+        # the head depth cloud against the robot model, from the side and from above in
+        # base_link, to check the head camera's mounted pose (tools/calibrate_head_pose.py)
+        tabs.append(rrb.Horizontal(
+            *[rrb.Spatial3DView(
+                name=name, origin="/",
+                contents=["/xlerobot/**", "/transforms/**", "/cameras/head",
+                          "- /xlerobot/collision_geometries/**"],
+                spatial_information=rrb.SpatialInformation(target_frame="base_link"),
+                eye_controls=rrb.EyeControls3D(
+                    position=position, look_target=(0.3, 0.0, 0.6), eye_up=eye_up))
+              for name, position, eye_up in (
+                  ("Head depth, side", (0.3, -2.8, 0.7), (0.0, 0.0, 1.0)),
+                  ("Head depth, top", (0.3, 0.0, 3.0), (1.0, 0.0, 0.0)))],
+            name="Head depth check",
+        ))
+
     tabs.append(rrb.Horizontal(
         rrb.Vertical(
             # from above with the robot's front (+x) up, the scan is in the robot's frame
