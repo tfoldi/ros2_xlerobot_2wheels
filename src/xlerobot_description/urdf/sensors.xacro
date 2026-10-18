@@ -98,10 +98,10 @@
            every per-stream optical frame itself, unlike usbcam/realsense which need the
            REP-103 remap done by hand below.
 
-           Identity rotation here is the first-cut assumption matching the camera's
-           physical mount (3D-printed holder cut down flat, camera sits horizontal,
-           forward axis assumed aligned with head_camera_mount's own forward axis) -
-           tune this rpy by hand once the real pointing direction is visible. -->
+           Pitch is -0.1606 rad (9.2 deg nose up), from the camera's own IMU: with the head
+           tilt at 0 and at -0.59 rad it read 9.2 deg higher than the joints predicted both
+           times, and a flat ChArUco board agrees to about 1.5 deg. Roll (about 1 deg) and
+           yaw are left at 0. -->
       <link name="head_camera_link">
         <visual>
           <geometry><box size="0.035 0.165 0.030"/></geometry>
@@ -118,7 +118,7 @@
       <joint name="head_camera_joint" type="fixed">
         <parent link="head_camera_mount"/>
         <child  link="head_camera_link"/>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <origin xyz="0 0 0" rpy="0 -0.1606 0"/>
       </joint>
       <link name="head_link"/>
       <joint name="head_link_joint" type="fixed">
