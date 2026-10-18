@@ -26,6 +26,7 @@ sys.path.insert(0, str(TOOLS_DIR))
 CAPTURE_DIR = TOOLS_DIR.parent / "captures"
 
 import cv2
+import numpy as np
 import rclpy
 import yaml
 from action_msgs.msg import GoalStatus, GoalStatusArray
@@ -37,8 +38,8 @@ from moveit_msgs.msg import MoveItErrorCodes, PlanningOptions
 from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from rclpy.qos import QoSDurabilityPolicy, QoSProfile
-from sensor_msgs.msg import CameraInfo, Image, JointState
+from rclpy.qos import QoSDurabilityPolicy, QoSProfile, qos_profile_sensor_data
+from sensor_msgs.msg import CameraInfo, CompressedImage, JointState
 from std_msgs.msg import Bool
 from std_srvs.srv import SetBool
 from tf2_ros import Buffer, TransformException, TransformListener
@@ -83,8 +84,7 @@ class XleRobotBridge(Node):
         self.amcl_pose = None  # (x, y, yaw)
         self.presence_ok = False
         self.nav_status = None
-        self.camera_frames = {c: None for c in CAMERAS}
-        self.camera_info = {c: None for c in CAMERAS}
+        self.camera_info = {c: None for c in CAMERAS}  # last camera_info seen by capture_image
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -100,13 +100,6 @@ class XleRobotBridge(Node):
         self.create_subscription(Bool, "/mcp_presence_ok", self._on_presence, 10)
         self.create_subscription(
             GoalStatusArray, "/navigate_to_pose/_action/status", self._on_nav_status, 10)
-        for camera in CAMERAS:
-            self.create_subscription(
-                Image, f"cameras/{camera}/image_raw",
-                (lambda msg, c=camera: self._on_image(c, msg)), 5)
-            self.create_subscription(
-                CameraInfo, f"cameras/{camera}/camera_info",
-                (lambda msg, c=camera: self._on_camera_info(c, msg)), 10)
 
         self.move_group = ActionClient(self, MoveGroup, "/move_action")
         self.nav_action = ActionClient(self, NavigateToPose, "navigate_to_pose")
@@ -131,12 +124,6 @@ class XleRobotBridge(Node):
     def _on_nav_status(self, msg):
         if msg.status_list:
             self.nav_status = msg.status_list[-1].status
-
-    def _on_image(self, camera, msg):
-        self.camera_frames[camera] = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-
-    def _on_camera_info(self, camera, msg):
-        self.camera_info[camera] = msg
 
     # -- generic async-future -> sync-call bridge (calling thread) ---------------------------
 
@@ -371,18 +358,56 @@ class XleRobotBridge(Node):
             "presence_ok": self.presence_ok,
             "joint_states_fresh": fresh,
             "localized": self.amcl_pose is not None,
-            "cameras_live": {c: (self.camera_frames[c] is not None) for c in CAMERAS},
+            "cameras_live": {c: self.count_publishers(f"cameras/{c}/image_raw") > 0 for c in CAMERAS},
         }
+
+    def _compressed_topic(self, camera):
+        # The Gemini driver publishes its JPEG stream under color/, the usb_cam nodes directly.
+        candidates = [f"cameras/{camera}/image_raw/compressed", f"cameras/{camera}/color/image_raw/compressed"]
+        for topic in candidates:
+            if self.count_publishers(topic) > 0:
+                return topic
+        return candidates[0]
+
+    def _grab_frame(self, camera, timeout=5.0):
+        """One fresh (frame, camera_info) pair, or (None, None). Subscribes only for the duration
+        of the call, to the JPEG stream: a standing subscription to the raw video pulled every
+        frame over the network and stalled the Gemini driver, and a raw 1280x720 frame sent
+        best-effort over Wi-Fi is thousands of UDP fragments, so losing any one drops the frame."""
+        got = {}
+        image_arrived = threading.Event()
+
+        def on_image(msg):
+            if "image" not in got:
+                got["image"] = msg
+                image_arrived.set()
+
+        def on_info(msg):
+            got.setdefault("info", msg)
+
+        subs = [
+            self.create_subscription(CompressedImage, self._compressed_topic(camera), on_image, 1),
+            self.create_subscription(CameraInfo, f"cameras/{camera}/camera_info", on_info, qos_profile_sensor_data),
+        ]
+        try:
+            if not image_arrived.wait(timeout):
+                return None, None
+            info_deadline = time.time() + 1.0
+            while "info" not in got and time.time() < info_deadline:
+                time.sleep(0.05)
+            frame = cv2.imdecode(np.frombuffer(got["image"].data, np.uint8), cv2.IMREAD_COLOR)
+            return frame, got.get("info")
+        finally:
+            for sub in subs:
+                self.destroy_subscription(sub)
 
     def capture_image(self, camera, output_path):
         if camera not in CAMERAS:
             raise ValueError(f"camera must be one of {CAMERAS}")
-        deadline = time.time() + 5
-        while self.camera_frames[camera] is None and time.time() < deadline:
-            time.sleep(0.1)
-        frame = self.camera_frames[camera]
+        frame, camera_info = self._grab_frame(camera)
         if frame is None:
-            raise MoveError(f"no frame from cameras/{camera}/image_raw - is bringup running with cameras:=true?")
+            raise MoveError(f"no frame from cameras/{camera} - is bringup running with cameras:=true?")
+        self.camera_info[camera] = camera_info
         output_path.parent.mkdir(parents=True, exist_ok=True)
         cv2.imwrite(str(output_path), frame)
 
@@ -391,7 +416,6 @@ class XleRobotBridge(Node):
         # realsense), and camera_info's own header already carries it. Falls back to the
         # static value only in the unlikely case camera_info hasn't arrived yet even though
         # a frame has.
-        camera_info = self.camera_info[camera]
         frame_id = camera_info.header.frame_id if camera_info is not None else CAMERA_FRAME_IDS[camera]
         camera_pose_map, tf_error = self._camera_pose_in_map(frame_id)
         result = {

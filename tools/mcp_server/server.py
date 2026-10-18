@@ -111,7 +111,8 @@ def get_robot_pose(reason: str = "") -> dict | None:
 @catch_bridge_errors
 def get_status(reason: str = "") -> dict:
     """Liveness summary: presence heartbeat, joint_states freshness, localization, which cameras
-    have a frame. NOT a torque-state check - see tools/calibrate_arm.py status for that."""
+    have a publisher (cameras_live says one is advertising, not that frames are fresh; use
+    capture_image for that). NOT a torque-state check - see tools/calibrate_arm.py status for that."""
     return bridge.get_bridge().get_status()
 
 
